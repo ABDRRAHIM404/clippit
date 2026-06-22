@@ -22,7 +22,8 @@ class FFmpegService {
       return File(targetPath);
     } else {
       final logs = await session.getLogs();
-      throw Exception('FFmpeg Trim Failed: ${logs.join("\n")}');
+      final logMessages = logs.map((l) => l.getMessage()).join("\n");
+      throw Exception('FFmpeg Trim Failed:\n$logMessages');
     }
   }
 
@@ -41,7 +42,8 @@ class FFmpegService {
       return File(targetPath);
     } else {
       final logs = await session.getLogs();
-      throw Exception('FFmpeg Muxing Failed: ${logs.join("\n")}');
+      final logMessages = logs.map((l) => l.getMessage()).join("\n");
+      throw Exception('FFmpeg Muxing Failed:\n$logMessages');
     }
   }
 
@@ -96,7 +98,8 @@ class FFmpegService {
       return File(targetPath);
     } else {
       final logs = await session.getLogs();
-      throw Exception('FFmpeg Render Failed: ${logs.join("\n")}');
+      final logMessages = logs.map((l) => l.getMessage()).join("\n");
+      throw Exception('FFmpeg Render Failed:\n$logMessages');
     }
   }
 
