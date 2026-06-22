@@ -1,4 +1,5 @@
 name: Build Android Release APK
+working-directory: ./clippit
 
 on:
   push:
