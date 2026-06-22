@@ -22,7 +22,7 @@ dependencies:
 
   # Local Media Downloading & Processing
   youtube_explode_dart: ^2.2.1 # Pure Dart YT downloader (highly stable & CI-friendly)
-  ffmpeg_kit_flutter_new: ^3.1.0 # Modern, maintained FFmpeg Kit (Full-GPL version)
+  ffmpeg_kit_flutter_new: ^4.2.1 # Upgraded to 4.2.1 for JDK 17 compatibility
 
   # On-Device ML
   google_mlkit_face_detection: ^0.11.0 # High-speed free local face-tracking
