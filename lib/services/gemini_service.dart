@@ -176,6 +176,7 @@ class GeminiService {
       stream,
       length,
       filename: file.path.split('/').last,
+      contentType: MediaType('video', 'mp4'), // 🌟 Explicitly declare video/mp4 to bypass octet-stream error!
     );
     request.files.add(multipartFile);
 
