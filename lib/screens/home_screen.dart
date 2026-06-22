@@ -35,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ClipHistoryEntry> _historyList = [];
   String _savedApiKey = '';
   bool _obscureKey = true;
+  bool _isProcessing = false; // 🌟 DECLARED FOR COMPILE SAFETY!
   
   ClipperController? _clipperController;
   ClipSuggestion? _selectedSuggestionForEdit;
@@ -372,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _clipperController!.errorMessage ?? 'Unknown error.',
+                    _clipperController!.errorMessage ?? 'Unknown error occurred.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                   ),

@@ -1,4 +1,4 @@
-import 'dart:io';
+mport 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
@@ -175,9 +175,9 @@ class ClipperController extends ChangeNotifier {
     final documentsDir = await storageService.getAppLibraryDirectory();
 
     final String clipId = DateTime.now().millisecondsSinceEpoch.toString();
-    final String trimmedPath = '${tempDir.path}/clip_$clipId_trimmed.mp4';
-    final String finalRenderPath = '${documentsDir.path}/clip_$clipId_rendered.mp4';
-    final String thumbnailPath = '${documentsDir.path}/clip_$clipId_thumb.jpg';
+    final String trimmedPath = '${tempDir.path}/clip_${clipId}_trimmed.mp4';
+    final String finalRenderPath = '${documentsDir.path}/clip_${clipId}_rendered.mp4';
+    final String thumbnailPath = '${documentsDir.path}/clip_${clipId}_thumb.jpg';
 
     File? trimmedFile;
     File? assFile;
@@ -227,7 +227,7 @@ class ClipperController extends ChangeNotifier {
         final Map<String, dynamic> rawTranscript = await geminiService.transcribeClipSegment(trimmedFile);
 
         _updateState(PipelineStatus.transcribingPass2, progress: 0.7, message: 'Compiling subtitles style sheet...');
-        final String assPath = '${tempDir.path}/clip_$clipId_subs.ass';
+        final String assPath = '${tempDir.path}/clip_${clipId}_subs.ass';
         
         assFile = await captionService.generateAssSubtitles(
           geminiTranscript: rawTranscript,

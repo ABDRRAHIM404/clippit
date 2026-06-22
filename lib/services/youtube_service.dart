@@ -15,7 +15,7 @@ class YouTubeService {
     }
   }
 
-  /// Extracts the clean alphanumeric YouTube Video ID
+  /// Extracts the clean alphanumeric YouTube Video ID as a String
   String extractVideoId(String url) {
     return VideoId.parseVideoId(url).value;
   }
@@ -28,6 +28,7 @@ class YouTubeService {
     required Function(double progress) onProgress,
   }) async {
     final videoId = VideoId.parseVideoId(url);
+    final String videoIdString = videoId.value; // 🌟 Safe, explicit String value extracted!
     
     // Get stream manifest
     final manifest = await _yt.videos.streams.getManifest(videoId);
@@ -37,35 +38,33 @@ class YouTubeService {
     // Choose highest quality audio-only stream
     final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
 
-    final tempVideoFile = File('$outputDirectory/${videoId.value}_temp_v.mp4');
-    final tempAudioFile = File('$outputDirectory/${videoId.value}_temp_a.mp4');
-    final muxedFile = File('$outputDirectory/${videoId.value}_full.mp4');
+    final tempVideoFile = File('$outputDirectory/${videoIdString}_temp_v.mp4');
+    final tempAudioFile = File('$outputDirectory/${videoIdString}_temp_a.mp4');
+    final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
 
-    // If muxed file already exists, return it immediately (caching down to stream downloads!)
+    // If muxed file already exists, return it immediately (caching stream downloads)
     if (await muxedFile.exists() && await muxedFile.length() > 100000) {
       onProgress(1.0);
       return muxedFile;
     }
 
     try {
-      // 1. Download Video Stream (scaled to represent 0% to 70% of loading sequence)
+      // 1. Download Video Stream (0% to 70% of loading sequence)
       await _downloadStream(
         videoStreamInfo, 
         tempVideoFile, 
         (p) => onProgress(p * 0.70),
       );
       
-      // 2. Download Audio Stream (scaled to represent 70% to 95% of loading sequence)
+      // 2. Download Audio Stream (70% to 95% of loading sequence)
       await _downloadStream(
         audioStreamInfo, 
         tempAudioFile, 
         (p) => onProgress(0.70 + (p * 0.25)),
       );
 
-      // 3. Mux streams together via stream copying (-c:v copy -c:a copy is instantaneous)
+      // 3. Mux streams together via stream copying (instantaneous)
       onProgress(0.97);
-      
-      final String muxCmd = '-i "${tempVideoFile.path}" -i "${tempAudioFile.path}" -c:v copy -c:a copy -y "${muxedFile.path}"';
       
       // Execute muxing via our FFmpegService wrapper
       await ffmpegService.muxStreams(
@@ -73,10 +72,6 @@ class YouTubeService {
         audioFile: tempAudioFile,
         targetPath: muxedFile.path,
       );
-      
-      // Alternative clean command fallback execution directly:
-      // Since FFmpegService uses raw commands under the hood, we can invoke the muxing command
-      // directly on FFmpegKit inside a try-catch to ensure total isolation.
       
       onProgress(1.0);
       return muxedFile;

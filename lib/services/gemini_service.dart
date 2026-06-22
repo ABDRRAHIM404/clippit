@@ -82,8 +82,10 @@ class GeminiService {
       await _pollFileStatus(fileUri);
 
       onStatusUpdate?.call('Generating highlights using ${analysisModelName}...');
-      // Pass file representation part
-      final filePart = FileRef(fileUri, 'video/mp4');
+      
+      // Use built-in FilePart instead of custom sealed class extension
+      final filePart = FilePart(Uri.parse(fileUri));
+      
       final response = await _model.generateContent([
         Content.multi([
           filePart,
@@ -117,7 +119,10 @@ class GeminiService {
       await _pollFileStatus(fileUri);
 
       onStatusUpdate?.call('Transcribing relative audio streams...');
-      final filePart = FileRef(fileUri, 'video/mp4');
+      
+      // Use built-in FilePart instead of custom sealed class extension
+      final filePart = FilePart(Uri.parse(fileUri));
+      
       final response = await _transcribeModel.generateContent([
         Content.multi([
           filePart,
@@ -223,20 +228,4 @@ class GeminiService {
       print('Warning: Error during cloud deletion: $e');
     }
   }
-}
-
-/// Custom wrapper to make the File upload URI compatible with GenerativeModel's Part list
-class FileRef extends Part {
-  final String fileUri;
-  final String mimeType;
-
-  FileRef(this.fileUri, this.mimeType);
-
-  @override
-  Map<String, dynamic> toJson() => {
-    'fileData': {
-      'fileUri': fileUri,
-      'mimeType': mimeType,
-    }
-  };
 }
