@@ -74,8 +74,8 @@ class GeminiService {
   Future<List<ClipSuggestion>> analyzeVideoFile(File videoFile, {Function(String status)? onStatusUpdate}) async {
     onStatusUpdate?.call('Uploading video to Gemini Cloud Storage...');
     final uploadResponse = await _uploadToFilesApi(videoFile);
-    final String fileUri = uploadResponse['fileUri'];
-    final String apiName = uploadResponse['apiName'];
+    final String fileUri = uploadResponse['fileUri'] ?? '';
+    final String apiName = uploadResponse['apiName'] ?? '';
 
     try {
       onStatusUpdate?.call('Analyzing visual contents (polling until active)...');
@@ -111,8 +111,8 @@ class GeminiService {
   Future<Map<String, dynamic>> transcribeClipSegment(File trimmedClip, {Function(String status)? onStatusUpdate}) async {
     onStatusUpdate?.call('Uploading clip to Gemini...');
     final uploadResponse = await _uploadToFilesApi(trimmedClip);
-    final String fileUri = uploadResponse['fileUri'];
-    final String apiName = uploadResponse['apiName'];
+    final String fileUri = uploadResponse['fileUri'] ?? '';
+    final String apiName = uploadResponse['apiName'] ?? '';
 
     try {
       onStatusUpdate?.call('Processing audio timeline (polling active state)...');
