@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<ClipHistoryEntry> _historyList = [];
   String _savedApiKey = '';
-  String _savedModelName = 'gemini-1.5-flash'; // 🌟 Default configured model name
+  String _savedModelName = 'gemini-1.5-flash'; // Default configured model name
   bool _obscureKey = true;
   bool _isProcessing = false;
   
@@ -94,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
         youtubeService: YouTubeService(),
         geminiService: GeminiService(
           apiKey: _savedApiKey,
-          analysisModelName: _savedModelName, // 🌟 Dynamic settings target!
+          analysisModelName: _savedModelName, // Dynamic settings target!
           transcriptionModelName: 'gemini-1.5-flash',
         ),
         ffmpegService: FFmpegService(),
@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   
-                  // 🌟 MODEL SELECTION DROPDOWN
+                  // MODEL SELECTION DROPDOWN
                   const Text(
                     'AI Highlight Model',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
@@ -375,8 +375,32 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      // C. Transition to Sliders Fine-Tuning screen
+      // C. Transition to Sliders Fine-Tuning screen (With background asset downloader safe loading!)
       if (_selectedSuggestionForEdit != null && status == PipelineStatus.showingHighlights) {
+        if (_clipperController!.processedSourceFile == null) {
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: AppColors.accentNeon),
+                  SizedBox(height: 24),
+                  Text(
+                    'Preparing video assets...',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Fetching high-speed stream preview from YouTube...',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         return EditScreen(
           sourceVideoFile: _clipperController!.processedSourceFile!,
           initialSuggestion: _selectedSuggestionForEdit!,

@@ -84,7 +84,12 @@ class ClipperController extends ChangeNotifier {
       final cached = dbService.getCachedSuggestions(videoId);
       if (cached != null) {
         _suggestions = cached;
-        _updateState(PipelineStatus.showingHighlights, progress: 1.0);
+        // Broadcast suggestions instantly to UI (Instant Load UX!)
+        _updateState(PipelineStatus.showingHighlights, progress: 1.0, message: 'Loaded suggestions from cache');
+        
+        // 🌟 Start downloading the muxed video silently in the background
+        // so that _processedSourceFile is populated by the time the user clicks "Select and Edit"!
+        _downloadMuxedVideoBackground(url, tempDir.path);
         return;
       }
 
@@ -104,6 +109,22 @@ class ClipperController extends ChangeNotifier {
       await _runPass1Analysis(muxedFile);
     } catch (e) {
       _handleFailure(e.toString());
+    }
+  }
+
+  /// Helper to download the muxed video in the background during a cache hit
+  Future<void> _downloadMuxedVideoBackground(String url, String tempPath) async {
+    try {
+      final muxedFile = await youtubeService.downloadAndMuxYouTubeVideo(
+        url: url,
+        outputDirectory: tempPath,
+        ffmpegService: ffmpegService,
+        onProgress: (_) {}, // silent background progress
+      );
+      _processedSourceFile = muxedFile;
+      notifyListeners(); // Notify HomeScreen that video file is now ready
+    } catch (e) {
+      print('Warning: Background download failed: $e');
     }
   }
 
@@ -197,8 +218,6 @@ class ClipperController extends ChangeNotifier {
       if (enableCrop) {
         _updateState(PipelineStatus.trackingFaces, progress: 0.3, message: 'Running Face Detector...');
         
-        // We calculate dynamic crop dimensions. 
-        // Note: Real face-tracking requires resolution metadata. We sample standard 1920x1080 bounds:
         final List<double> smoothedXList = await faceTrackingService.computeSpeakerXCoordinates(
           videoFile: trimmedFile,
           videoWidth: 1920,
