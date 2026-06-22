@@ -1,4 +1,4 @@
-mport 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
