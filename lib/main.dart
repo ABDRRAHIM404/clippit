@@ -175,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.settings, color: AppColors.primaryLight, size: 24),
                       SizedBox(width: 8),
                       Text(
-                        'Clippit settings',
+                        'Clippit Settings',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                       ),
                     ],
@@ -315,11 +315,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Icon(Icons.link, color: AppColors.accentNeon, size: 24),
-                    const SizedBox(width: 8),
-                    const Text(
+                    Icon(Icons.link, color: AppColors.accentNeon, size: 24),
+                    SizedBox(width: 8),
+                    Text(
                       'Paste YouTube URL',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
