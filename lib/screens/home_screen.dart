@@ -1,8 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../models/clip_history_entry.dart';
+import '../models/clip_suggestion.dart';
 import '../services/db_service.dart';
+import '../services/youtube_service.dart';
+import '../services/gemini_service.dart';
+import '../services/ffmpeg_service.dart';
+import '../services/caption_service.dart';
+import '../services/face_tracking_service.dart';
+import '../services/storage_service.dart';
+import '../controllers/clipper_controller.dart';
+import 'processing_screen.dart';
+import 'highlights_screen.dart';
+import 'edit_screen.dart';
+import 'export_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final DbService dbService;
@@ -16,11 +30,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
   
   List<ClipHistoryEntry> _historyList = [];
-  bool _isProcessing = false;
   String _savedApiKey = '';
   bool _obscureKey = true;
+  
+  ClipperController? _clipperController;
+  ClipSuggestion? _selectedSuggestionForEdit;
 
   @override
   void initState() {
@@ -35,7 +52,31 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _savedApiKey = prefs.getString('gemini_api_key') ?? '';
       _apiKeyController.text = _savedApiKey;
+      _initClipperController();
     });
+  }
+
+  // Initializes our state controller only if an API key exists
+  void _initClipperController() {
+    if (_savedApiKey.isNotEmpty) {
+      _clipperController = ClipperController(
+        youtubeService: YouTubeService(),
+        geminiService: GeminiService(apiKey: _savedApiKey),
+        ffmpegService: FFmpegService(),
+        captionService: CaptionService(),
+        faceTrackingService: FaceTrackingService(),
+        storageService: StorageService(),
+        dbService: widget.dbService,
+      )..addListener(_onControllerStateChanged);
+    }
+  }
+
+  void _onControllerStateChanged() {
+    if (mounted) {
+      setState(() {
+        _loadHistory(); // reload clips if compilation succeeds
+      });
+    }
   }
 
   // Persists the Gemini API key locally to SharedPreferences
@@ -44,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setString('gemini_api_key', key.trim());
     setState(() {
       _savedApiKey = key.trim();
+      _initClipperController();
     });
     
     if (mounted) {
@@ -63,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleUrlSubmit() async {
-    if (_savedApiKey.isEmpty) {
+    if (_savedApiKey.isEmpty || _clipperController == null) {
       _showApiKeyWarning();
       return;
     }
@@ -76,10 +118,26 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     
-    setState(() => _isProcessing = true);
-    // Linked controller processes the link here
+    // Trigger download & Pass 1 AI Analysis inside the State Machine
+    await _clipperController!.processYouTubeInput(url);
     _urlController.clear();
-    setState(() => _isProcessing = false);
+  }
+
+  Future<void> _pickLocalFile() async {
+    if (_savedApiKey.isEmpty || _clipperController == null) {
+      _showApiKeyWarning();
+      return;
+    }
+
+    // Launch Android's native picker intent
+    final XFile? video = await _picker.pickVideo(source: ImageSource.gallery);
+    if (video != null) {
+      final file = File(video.path);
+      final displayName = video.name;
+      
+      // Trigger Hashing & Pass 1 AI Analysis inside the State Machine
+      await _clipperController!.processLocalFileInput(file, displayName);
+    }
   }
 
   void _showApiKeyWarning() {
@@ -109,16 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _pickLocalFile() async {
-    if (_savedApiKey.isEmpty) {
-      _showApiKeyWarning();
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('File picker triggered (configured with saved API Key)')),
-    );
-  }
-
   Future<void> _deleteHistoryItem(String id) async {
     await widget.dbService.deleteHistoryEntry(id);
     _loadHistory();
@@ -129,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Opens a beautiful settings slide-up panel to manage Keys and preferences
+  // Opens settings panel to manage Keys
   void _openSettingsBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -175,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.settings, color: AppColors.primaryLight, size: 24),
                       SizedBox(width: 8),
                       Text(
-                        'Clippit settings',
+                        'Clippit Settings',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                       ),
                     ],
@@ -230,7 +278,118 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _clipperController?.removeListener(_onControllerStateChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // 🌟 STATE-BASED ROUTING LOGIC
+    if (_clipperController != null) {
+      final status = _clipperController!.status;
+      
+      // A. Show Processing Overlay for any background pipeline state
+      if (status == PipelineStatus.downloading ||
+          status == PipelineStatus.hashing ||
+          status == PipelineStatus.analyzingPass1 ||
+          status == PipelineStatus.trimming ||
+          status == PipelineStatus.trackingFaces ||
+          status == PipelineStatus.transcribingPass2 ||
+          status == PipelineStatus.renderingFinal) {
+        return ProcessingScreen(
+          statusMessage: _clipperController!.statusMessage,
+          progress: _clipperController!.progress,
+          onCancel: () => _clipperController!.reset(),
+        );
+      }
+
+      // B. Show Highlights Panel when suggestions have loaded
+      if (status == PipelineStatus.showingHighlights && _selectedSuggestionForEdit == null) {
+        return HighlightsScreen(
+          suggestions: _clipperController!.suggestions,
+          sourceTitle: _clipperController!.activeSourceTitle,
+          onClipSelected: (clip) {
+            setState(() {
+              _selectedSuggestionForEdit = clip;
+            });
+          },
+        );
+      }
+
+      // C. Transition to Sliders Fine-Tuning screen
+      if (_selectedSuggestionForEdit != null && status == PipelineStatus.showingHighlights) {
+        return EditScreen(
+          sourceVideoFile: _clipperController!.processedSourceFile!,
+          initialSuggestion: _selectedSuggestionForEdit!,
+          onExportTriggered: ({
+            required double startSeconds,
+            required double endSeconds,
+            required bool enableCrop,
+            required bool enableCaptions,
+            required String selectedLanguage,
+          }) {
+            setState(() {
+              _selectedSuggestionForEdit = null;
+            });
+            _clipperController!.renderAndExportClip(
+              startSeconds: startSeconds,
+              endSeconds: endSeconds,
+              enableCrop: enableCrop,
+              enableCaptions: enableCaptions,
+              selectedLanguage: selectedLanguage,
+            );
+          },
+        );
+      }
+
+      // D. Show the Video Player Export/Share Sheet on successful rendering
+      if (status == PipelineStatus.completed) {
+        final File? file = _clipperController!.processedSourceFile;
+        return ExportScreen(
+          renderedClipFile: file!,
+          clipTitle: _clipperController!.activeSourceTitle,
+          onReturnHome: () {
+            _clipperController!.reset();
+          },
+        );
+      }
+
+      // E. Show Error sheets in case of API failure
+      if (status == PipelineStatus.error) {
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: AppColors.error, size: 64),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'An error occurred in the pipeline',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _clipperController!.errorMessage ?? 'Unknown error.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => _clipperController!.reset(),
+                    child: const Text('Back to Home'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    // Default: Show Core Slogan/Inputs Dashboard (PipelineStatus.idle)
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -308,18 +467,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildInputTabs() {
     return Column(
       children: [
-        // YouTube URL Input Card
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Icon(Icons.link, color: AppColors.accentNeon, size: 24),
-                    const SizedBox(width: 8),
-                    const Text(
+                    Icon(Icons.link, color: AppColors.accentNeon, size: 24),
+                    SizedBox(width: 8),
+                    Text(
                       'Paste YouTube URL',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
@@ -338,14 +496,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isProcessing ? null : _handleUrlSubmit,
-                    child: _isProcessing
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Start AI Analysis'),
+                    onPressed: _handleUrlSubmit,
+                    child: const Text('Start AI Analysis'),
                   ),
                 ),
               ],
@@ -353,8 +505,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        
-        // Local File Upload Card
         GestureDetector(
           onTap: _pickLocalFile,
           child: Container(
