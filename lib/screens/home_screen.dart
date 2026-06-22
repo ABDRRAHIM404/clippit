@@ -34,27 +34,57 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<ClipHistoryEntry> _historyList = [];
   String _savedApiKey = '';
+  String _savedModelName = 'gemini-1.5-flash'; // 🌟 Default configured model name
   bool _obscureKey = true;
-  bool _isProcessing = false; // 🌟 DECLARED FOR COMPILE SAFETY!
+  bool _isProcessing = false;
   
   ClipperController? _clipperController;
   ClipSuggestion? _selectedSuggestionForEdit;
+
+  final List<String> _availableModels = [
+    'gemini-1.5-flash', // Safest, universally supported free-tier fallback
+    'gemini-2.5-flash', // Bleeding-edge 2026 high-speed reasoning model
+    'gemini-1.5-pro'    // Deep reasoning model
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
-    _loadSavedApiKey();
+    _loadSavedSettings();
   }
 
-  // Load saved API key from local device preferences
-  Future<void> _loadSavedApiKey() async {
+  // Load saved API key & Model configurations from local device preferences
+  Future<void> _loadSavedSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _savedApiKey = prefs.getString('gemini_api_key') ?? '';
+      _savedModelName = prefs.getString('gemini_model_name') ?? 'gemini-1.5-flash';
       _apiKeyController.text = _savedApiKey;
       _initClipperController();
     });
+  }
+
+  // Persists the Gemini settings locally
+  Future<void> _saveSettings(String key, String modelName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('gemini_api_key', key.trim());
+    await prefs.setString('gemini_model_name', modelName);
+    
+    setState(() {
+      _savedApiKey = key.trim();
+      _savedModelName = modelName;
+      _initClipperController();
+    });
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Settings successfully saved locally!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
   }
 
   // Initializes our state controller only if an API key exists
@@ -62,7 +92,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_savedApiKey.isNotEmpty) {
       _clipperController = ClipperController(
         youtubeService: YouTubeService(),
-        geminiService: GeminiService(apiKey: _savedApiKey),
+        geminiService: GeminiService(
+          apiKey: _savedApiKey,
+          analysisModelName: _savedModelName, // 🌟 Dynamic settings target!
+          transcriptionModelName: 'gemini-1.5-flash',
+        ),
         ffmpegService: FFmpegService(),
         captionService: CaptionService(),
         faceTrackingService: FaceTrackingService(),
@@ -77,25 +111,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _loadHistory(); // reload clips if compilation succeeds
       });
-    }
-  }
-
-  // Persists the Gemini API key locally to SharedPreferences
-  Future<void> _saveApiKey(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('gemini_api_key', key.trim());
-    setState(() {
-      _savedApiKey = key.trim();
-      _initClipperController();
-    });
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gemini API Key successfully saved locally!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
     }
   }
 
@@ -178,8 +193,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Opens settings panel to manage Keys
+  // Opens settings panel to manage Keys and choose models dynamically
   void _openSettingsBottomSheet() {
+    String localSelectedModel = _savedModelName;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -229,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 22),
                   const Text(
                     'Gemini API Key',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
@@ -253,17 +270,57 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 20),
+                  
+                  // 🌟 MODEL SELECTION DROPDOWN
                   const Text(
-                    'Your API key is stored 100% locally on your phone filesystem and is only used to talk directly to Gemini APIs. No telemetry.',
+                    'AI Highlight Model',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: DropdownButton<String>(
+                      value: localSelectedModel,
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      dropdownColor: AppColors.surface,
+                      items: _availableModels.map((String model) {
+                        return DropdownMenuItem<String>(
+                          value: model,
+                          child: Text(
+                            model,
+                            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (String? val) {
+                        if (val != null) {
+                          setModalState(() {
+                            localSelectedModel = val;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Your API key and model choices are stored 100% locally on your phone filesystem and are only used to talk directly to Gemini APIs.',
                     style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        _saveApiKey(_apiKeyController.text);
+                        _saveSettings(_apiKeyController.text, localSelectedModel);
                         Navigator.pop(context);
                       },
                       child: const Text('Save & Close'),

@@ -16,7 +16,7 @@ class GeminiService {
 
   GeminiService({
     required this.apiKey,
-    this.analysisModelName = 'gemini-1.5-pro',
+    this.analysisModelName = 'gemini-1.5-flash', // 🌟 Changed default to universally accessible gemini-1.5-flash!
     this.transcriptionModelName = 'gemini-1.5-flash',
   }) {
     // 1. Configure Pass 1 Model with JSON schema constraints
