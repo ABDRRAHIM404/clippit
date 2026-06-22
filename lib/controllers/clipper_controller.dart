@@ -87,8 +87,7 @@ class ClipperController extends ChangeNotifier {
         // Broadcast suggestions instantly to UI (Instant Load UX!)
         _updateState(PipelineStatus.showingHighlights, progress: 1.0, message: 'Loaded suggestions from cache');
         
-        // 🌟 Start downloading the muxed video silently in the background
-        // so that _processedSourceFile is populated by the time the user clicks "Select and Edit"!
+        // Start downloading the muxed video silently in the background
         _downloadMuxedVideoBackground(url, tempDir.path);
         return;
       }
@@ -226,16 +225,20 @@ class ClipperController extends ChangeNotifier {
         );
 
         if (smoothedXList.isNotEmpty) {
-          // Average crop location fallback to avoid jerky dynamic motions (Option A)
           double averageX = smoothedXList.reduce((a, b) => a + b) / smoothedXList.length;
-          // Standard width of 9:16 crop box on a 1920 height landscape canvas: 607px
-          double cropX = averageX - (607.5 / 2);
-          cropX = cropX.clamp(0.0, 1920.0 - 607.5); // Bound margins check
           
-          cropFilterString = 'crop=607:1080:$cropX:0';
+          // 🌟 CRITICAL FFmpeg BUG FIX:
+          // x264/H264 encoding strictly demands even numbers for video width and height (divisible by 2).
+          // 607 is odd and causes immediate encoder crash. We change it to 608 (perfectly divisible by 2).
+          // We also round cropX to an integer to ensure absolute coordinate compatibility.
+          double cropX = averageX - (608 / 2);
+          cropX = cropX.clamp(0.0, 1920.0 - 608); // Bound margins check
+          int cropXInt = cropX.round();
+          
+          cropFilterString = 'crop=608:1080:$cropXInt:0';
         } else {
-          // Fallback to absolute center crop
-          cropFilterString = 'crop=607:1080:656:0';
+          // Fallback to absolute center crop (using even values!)
+          cropFilterString = 'crop=608:1080:656:0';
         }
       }
 
