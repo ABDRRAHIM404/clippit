@@ -94,8 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
         youtubeService: YouTubeService(),
         geminiService: GeminiService(
           apiKey: _savedApiKey,
-          analysisModelName: _savedModelName, // Dynamic settings target!
-          transcriptionModelName: 'gemini-1.5-flash',
+          analysisModelName: _savedModelName,
+          transcriptionModelName: _savedModelName, // 🌟 Match user selected model for transcription!
         ),
         ffmpegService: FFmpegService(),
         captionService: CaptionService(),
