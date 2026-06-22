@@ -1,5 +1,4 @@
 name: Build Android Release APK
-working-directory: ./clippit
 
 on:
   push:
@@ -11,6 +10,12 @@ jobs:
   build:
     name: Build & Release Release APK
     runs-on: ubuntu-latest
+    
+    # 🌟 CORRECT WAY: This tells GitHub that ALL steps inside this build
+    # should be executed inside your "clippit" subfolder!
+    defaults:
+      run:
+        working-directory: ./clippit
 
     steps:
       - name: Checkout Repository
@@ -38,8 +43,10 @@ jobs:
       - name: Build Release APK
         run: flutter build apk --release --no-shrink
 
+      # 🌟 CRITICAL FIX: Since we compiled inside the subfolder,
+      # the upload path must point to clippit/build/...
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: clippit-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: clippit/build/app/outputs/flutter-apk/app-release.apk
