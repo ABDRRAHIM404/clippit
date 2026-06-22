@@ -14,21 +14,15 @@ class StorageService {
   }
 
   /// Generates a unique, memory-safe SHA-256 hash of a local video file.
-  /// Reads the file in 64KB chunks to keep the memory footprint extremely low (near 0MB RAM).
+  /// Uses direct Stream Binding to hash the file chunk-by-chunk under the hood,
+  /// keeping RAM usage at practically 0MB.
   Future<String> calculateFileHash(File file) async {
     if (!await file.exists()) {
       throw Exception('File does not exist for hash computation.');
     }
 
-    final ds = sha256.startChunkedConversion(accumulated);
-    final stream = file.openRead();
-    
-    await for (final chunk in stream) {
-      ds.add(chunk);
-    }
-    
-    ds.close();
-    return ds.accumulated.toString();
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString();
   }
 
   /// Clear all cached chunks and media pieces inside the temp folder to save space

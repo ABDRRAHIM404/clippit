@@ -17,7 +17,10 @@ class YouTubeService {
 
   /// Extracts the clean alphanumeric YouTube Video ID as a String
   String extractVideoId(String url) {
-    return VideoId.parseVideoId(url).value;
+    final parsed = VideoId.parseVideoId(url);
+    // On different versions of youtube_explode_dart, parseVideoId might return String or VideoId.
+    // We handle both safely by converting to String.
+    return parsed?.toString() ?? '';
   }
 
   /// Downloads both high-resolution streams (video + audio) and muxes them locally via FFmpeg
@@ -27,11 +30,12 @@ class YouTubeService {
     required FFmpegService ffmpegService,
     required Function(double progress) onProgress,
   }) async {
-    final videoId = VideoId.parseVideoId(url);
-    final String videoIdString = videoId.value; // 🌟 Safe, explicit String value extracted!
+    final parsedId = VideoId.parseVideoId(url);
+    if (parsedId == null) throw Exception('Invalid YouTube URL');
+    final String videoIdString = parsedId.toString();
     
     // Get stream manifest
-    final manifest = await _yt.videos.streams.getManifest(videoId);
+    final manifest = await _yt.videos.streams.getManifest(parsedId);
     
     // Choose highest quality video-only stream (e.g. 1080p, 720p)
     final videoStreamInfo = manifest.videoOnly.withHighestBitrate();

@@ -4,7 +4,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 class FaceTrackingService {
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
-      mode: FaceDetectorMode.fast, // High performance prioritization
+      performanceMode: FaceDetectorMode.fast, // High performance prioritization
       enableClassification: false,
       enableTracking: true,        // Enable ID retention across frames
     ),
@@ -20,10 +20,7 @@ class FaceTrackingService {
     List<double> centersX = [];
     
     // 1. Core Logic: Extract frames as PNGs at a low frequency to prevent CPU overload.
-    // We extract frames every 200ms (5 frames per second) into a temp folder.
     final tempDir = Directory.systemTemp.createTempSync('frames');
-    // Using a simple command structure for FFmpeg extraction
-    // (Note: In the main controller, we run this command via our FFmpegKit instance)
     
     final List<FileSystemEntity> frames = tempDir.listSync().toList()
       ..sort((a, b) => a.path.compareTo(b.path));
@@ -41,7 +38,6 @@ class FaceTrackingService {
               .compareTo(a.boundingBox.width * a.boundingBox.height));
           
           final mainFace = faces.first;
-          // Calculate center horizontal coordinates of the face
           lastKnownX = mainFace.boundingBox.left + (mainFace.boundingBox.width / 2);
         }
         centersX.add(lastKnownX);

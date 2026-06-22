@@ -17,7 +17,7 @@ dependencies:
   chewie: ^1.7.1              # Custom video player UI controls
 
   # AI & Cloud API
-  google_generative_ai: ^0.2.0 # Official Gemini API Dart wrapper
+  google_generative_ai: ^0.4.0 # Upgraded to ^0.4.0 for FilePart and responseMimeType
   http: ^1.2.0                 # HTTP client for Gemini Files API uploads
 
   # Local Media Downloading & Processing
