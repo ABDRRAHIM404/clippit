@@ -1,0 +1,46 @@
+name: clippit
+description: AI-Powered YouTube Highlight Clipper
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI and Navigation
+  cupertino_icons: ^1.0.5
+  flutter_riverpod: ^2.4.9    # State management
+  google_fonts: ^6.1.0        # Modern typography
+  video_player: ^2.8.1        # Inline editing preview
+  chewie: ^1.7.1              # Custom video player UI controls
+
+  # AI & Cloud API
+  google_generative_ai: ^0.2.0 # Official Gemini API Dart wrapper
+  http: ^1.2.0                 # HTTP client for Gemini Files API uploads
+
+  # Local Media Downloading & Processing
+  youtube_explode_dart: ^2.2.1 # Pure Dart YT downloader (highly stable & CI-friendly)
+  ffmpeg_kit_flutter_new: ^3.1.0 # Modern, maintained FFmpeg Kit (Full-GPL version)
+
+  # On-Device ML
+  google_mlkit_face_detection: ^0.11.0 # High-speed free local face-tracking
+
+  # Local Database & Shared Preferences
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+
+  # Device Utility Packages
+  path_provider: ^2.1.1       # Finding temp/document folders
+  share_plus: ^7.2.1          # Native share sheets
+  crypto: ^3.0.3              # Video hashing for caching
+  uuid: ^4.3.3                # ID generation
+  intl: ^0.19.0               # Timestamp formatting
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
