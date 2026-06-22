@@ -40,6 +40,7 @@ class ClipperController extends ChangeNotifier {
 
   List<ClipSuggestion> _suggestions = [];
   File? _processedSourceFile;
+  File? _renderedClipFile; // 🌟 Added to persist the finished render clip!
   String _activeSourceTitle = '';
   String _activeSourceIdOrHash = '';
 
@@ -50,6 +51,7 @@ class ClipperController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   List<ClipSuggestion> get suggestions => _suggestions;
   File? get processedSourceFile => _processedSourceFile;
+  File? get renderedClipFile => _renderedClipFile; // 🌟 Getter for finished crop clip!
   String get activeSourceTitle => _activeSourceTitle;
 
   ClipperController({
@@ -254,6 +256,8 @@ class ClipperController extends ChangeNotifier {
         cropFilter: cropFilterString,
         assSubtitleFile: assFile,
       );
+      
+      _renderedClipFile = renderedClip; // 🌟 Persist the path of the newly finished render clip!
 
       // STEP 5: Generate Clip Thumbnail for History Dashboard
       _updateState(PipelineStatus.renderingFinal, progress: 0.95, message: 'Generating card thumbnails...');
@@ -295,6 +299,7 @@ class ClipperController extends ChangeNotifier {
     _progress = 0.0;
     _suggestions = [];
     _processedSourceFile = null;
+    _renderedClipFile = null; // 🌟 Reset render path
     _activeSourceTitle = '';
     _activeSourceIdOrHash = '';
     _errorMessage = null;

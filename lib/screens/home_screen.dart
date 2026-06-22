@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   ClipperController? _clipperController;
   ClipSuggestion? _selectedSuggestionForEdit;
+  File? _historicalClipToPlay; // 🌟 Persists chosen clip to play from dashboard history
 
   final List<String> _availableModels = [
     'gemini-1.5-flash', // Safest, universally supported free-tier fallback
@@ -95,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
         geminiService: GeminiService(
           apiKey: _savedApiKey,
           analysisModelName: _savedModelName,
-          transcriptionModelName: _savedModelName, // 🌟 Match user selected model for transcription!
+          transcriptionModelName: _savedModelName, // Match user selected model for transcription!
         ),
         ffmpegService: FFmpegService(),
         captionService: CaptionService(),
@@ -344,6 +345,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     // 🌟 STATE-BASED ROUTING LOGIC
+
+    // Play historical saved clip directly inside player overlay
+    if (_historicalClipToPlay != null) {
+      return ExportScreen(
+        renderedClipFile: _historicalClipToPlay!,
+        clipTitle: 'Saved Clip',
+        onReturnHome: () {
+          setState(() {
+            _historicalClipToPlay = null;
+          });
+        },
+      );
+    }
+
     if (_clipperController != null) {
       final status = _clipperController!.status;
       
@@ -427,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // D. Show the Video Player Export/Share Sheet on successful rendering
       if (status == PipelineStatus.completed) {
-        final File? file = _clipperController!.processedSourceFile;
+        final File? file = _clipperController!.renderedClipFile; // 🌟 Passed the finished rendered clip instead of full deleted temp source!
         return ExportScreen(
           renderedClipFile: file!,
           clipTitle: _clipperController!.activeSourceTitle,
@@ -695,6 +710,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               isThreeLine: true,
+              onTap: () {
+                // 🌟 EXTRA CREDIT UPGRADE: 
+                // Tapping any historical clip card now instantly plays it in your full-screen vertical player!
+                setState(() {
+                  _historicalClipToPlay = File(item.localVideoPath);
+                });
+              },
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, color: AppColors.error),
                 onPressed: () => _deleteHistoryItem(item.id),
