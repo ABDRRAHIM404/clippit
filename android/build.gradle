@@ -7,6 +7,7 @@ buildscript {
 
     dependencies {
         classpath 'com.android.tools.build:gradle:7.4.2'
+        classpath 'com.android.tools:r8:8.2.42' // 🌟 Resolves the JVM D8 NullPointerException compiler bug!
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
