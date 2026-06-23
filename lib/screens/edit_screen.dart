@@ -16,8 +16,8 @@ class EditScreen extends StatefulWidget {
     required String blurIntensity,
     required bool enableCaptions,
     required String selectedLanguage,
-    required String fontFamily,      // 🌟 Added dynamic font
-    required String highlightColor,  // 🌟 Added dynamic highlight color
+    required String fontFamily,      // Passes dynamic font
+    required String highlightColor,  // Passes dynamic highlight color
   }) onExportTriggered;
 
   const EditScreen({
@@ -42,18 +42,19 @@ class _EditScreenState extends State<EditScreen> {
   String _selectedBackgroundFill = 'Blur Fill'; // Default
   String _selectedBlurIntensity = 'Medium'; // Default
 
-  // 🌟 Dynamic Captions settings
+  // Dynamic Captions settings
   bool _enableCaptions = true;
   String _selectedLanguage = 'English';
   String _selectedFontFamilyName = 'Condensed Bold'; // Maps to sans-serif-condensed
   String _selectedHighlightColor = 'Electric Yellow'; // Default
+  bool _isPlayerInitialized = false; // 🌟 DECLARED FOR COMPILE SAFETY!
 
   final List<String> _cropStyles = ['Keep 16:9', '9:16', '1:1', '4:5'];
   final List<String> _backgroundFills = ['Blur Fill', 'Crop', 'Black Bars'];
   final List<String> _blurIntensities = ['Light', 'Medium', 'Heavy'];
   final List<String> _languages = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Japanese'];
 
-  // 🌟 Pre-mapped native Android system font options (100% crash-proof fallbacks)
+  // Pre-mapped native Android system font options (100% crash-proof fallbacks)
   final Map<String, String> _fontFamilyMapping = {
     'Condensed Bold': 'sans-serif-condensed',
     'Clean Modern': 'sans-serif',
@@ -536,7 +537,7 @@ class _EditScreenState extends State<EditScreen> {
                   const Divider(color: AppColors.border, height: 1),
                   const SizedBox(height: 12),
 
-                  // Row B: 🌟 Font Family Dropdown Selector
+                  // Row B: Font Family Dropdown Selector
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -564,7 +565,7 @@ class _EditScreenState extends State<EditScreen> {
                   const Divider(color: AppColors.border, height: 1),
                   const SizedBox(height: 12),
 
-                  // Row C: 🌟 Highlight Color Dropdown Selector
+                  // Row C: Highlight Color Dropdown Selector
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -675,8 +676,8 @@ class _EditScreenState extends State<EditScreen> {
                   blurIntensity: _selectedBlurIntensity,
                   enableCaptions: _enableCaptions,
                   selectedLanguage: _selectedLanguage,
-                  fontFamily: mappedFont,            // 🌟 Passes the actual native Font name
-                  highlightColor: _selectedHighlightColor, // 🌟 Passes the highlight color selection
+                  fontFamily: mappedFont,            // Passes the actual native Font name
+                  highlightColor: _selectedHighlightColor, // Passes the highlight color selection
                 );
               },
         style: ElevatedButton.styleFrom(

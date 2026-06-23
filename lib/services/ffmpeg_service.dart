@@ -1,19 +1,18 @@
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart'; // 🌟 Added to configure native fonts mapping
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart'; // Registers native fonts mapping
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 
 class FFmpegService {
   FFmpegService() {
-    // 🌟 CRITICAL FIX: Registers your phone's native system fonts directory on startup.
-    // This allows libass/subtitles filters to successfully map 'sans-serif', 'serif', etc.
-    // to your phone's physical .ttf files, resolving the invisible captions bug!
+    // Registers your phone's native system fonts directory on startup.
+    // This allows libass/subtitles filters to successfully map system fonts.
     FFmpegKitConfig.setFontDirectory('/system/fonts');
   }
 
   /// Step 1: Fast cut using stream copying (extremely fast, zero re-encode)
-  /// Upgraded with automatic high-speed hardware and software re-encoding fallbacks
-  /// to handle fragmented YouTube pre-muxed streams that fail under stream copying!
+  /// Upgraded with automatic high-speed hardware and software re-encoding fallbacks.
+  /// 🌟 Bypasses MediaCodec `-preset` crash by removing CPU options from h264_mediacodec!
   Future<File> trimVideo({
     required File sourceFile,
     required double startSeconds,
@@ -31,9 +30,9 @@ class FFmpegService {
     if (ReturnCode.isSuccess(returnCode)) {
       return File(targetPath);
     } else {
-      // 🌟 Fallback 1: If stream copying fails (common on fragmented YouTube MP4 index structures),
-      // re-encode the 60-second clip using native hardware-accelerated MediaCodec H.264 (finishes in <1 sec!)
-      final hwCmd = '-ss $startSeconds -i "${sourceFile.path}" -t $duration -c:v h264_mediacodec -preset ultrafast -c:a aac -y "$targetPath"';
+      // 🌟 Fallback 1: Re-encode the 60-second segment using native hardware-accelerated MediaCodec H.264
+      // Note: We removed the CPU-specific "-preset ultrafast" flag because h264_mediacodec does not support it!
+      final hwCmd = '-ss $startSeconds -i "${sourceFile.path}" -t $duration -c:v h264_mediacodec -c:a aac -y "$targetPath"';
       final hwSession = await FFmpegKit.execute(hwCmd);
       final hwReturnCode = await hwSession.getReturnCode();
       
@@ -77,7 +76,8 @@ class FFmpegService {
   }
 
   /// Step 2: Full Render (Smart Crop + Subtitles + Watermark Overlay)
-  /// Upgraded with Item 1: Hardware-Accelerated h264_mediacodec rendering
+  /// Upgraded with Item 1: Hardware-Accelerated h264_mediacodec rendering.
+  /// 🌟 Bypasses MediaCodec `-preset` crash by removing CPU options from h264_mediacodec!
   Future<File> renderFinalClip({
     required File trimmedClip,
     required String targetPath,
@@ -116,7 +116,8 @@ class FFmpegService {
     }
 
     // 🌟 Item 1: Try hardware-accelerated MediaCodec H.264 first, fallback to software if needed
-    final cmd = '$inputArgs $filterChain -c:v h264_mediacodec -preset superfast -crf 23 -c:a aac -b:a 128k -y "$targetPath"';
+    // Note: Removed "-preset superfast" and "-crf" because hardware encoders do not support software CPU flags!
+    final cmd = '$inputArgs $filterChain -c:v h264_mediacodec -b:v 3M -c:a aac -b:a 128k -y "$targetPath"';
 
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
@@ -139,13 +140,13 @@ class FFmpegService {
 
   /// Item 4: Ultra-fast re-encode to 320p for local file optimization uploads
   /// - Scaled down to 320 width (-vf scale=320:-2) for 3x faster encoding
-  /// - Uses 'ultrafast' preset to minimize CPU wait times
   /// - Copies the audio stream directly (-c:a copy) for 0% audio re-encoding lag!
   Future<File> compressVideoTo360p({
     required File inputFile,
     required String outputPath,
   }) async {
-    final cmd = '-i "${inputFile.path}" -vf "scale=320:-2" -c:v h264_mediacodec -preset ultrafast -c:a copy -y "$outputPath"';
+    // Note: Removed "-preset ultrafast" from h264_mediacodec call as it is unsupported by hardware encoders.
+    final cmd = '-i "${inputFile.path}" -vf "scale=320:-2" -c:v h264_mediacodec -b:v 1M -c:a copy -y "$outputPath"';
     
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
