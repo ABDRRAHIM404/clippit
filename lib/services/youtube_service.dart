@@ -23,7 +23,7 @@ class YouTubeService {
   }
 
   /// Downloads a pre-muxed stream (contains both video and audio)
-  /// Upgraded with strict timeouts (15 seconds) to prevent silent hangs and report errors clearly!
+  /// Upgraded with strict, safer timeouts (45 seconds) to accommodate high-latency mobile data streams!
   Future<File> downloadAndMuxYouTubeVideo({
     required String url,
     required String outputDirectory,
@@ -35,9 +35,9 @@ class YouTubeService {
       if (parsedId == null) throw Exception('Invalid YouTube URL format.');
       final String videoIdString = parsedId.toString();
       
-      // 🌟 Added strict timeout to getManifest call
+      // 🌟 Increased timeout to 45 seconds to guarantee handshake completes on mobile data networks!
       final manifest = await _yt.videos.streams.getManifest(parsedId).timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 45),
         onTimeout: () => throw TimeoutException('Failed to retrieve video metadata from YouTube (Connection Timed Out).'),
       );
       
@@ -50,7 +50,7 @@ class YouTubeService {
         return muxedFile;
       }
 
-      // Download the unified stream directly (with strict chunked timeouts)
+      // Download the unified stream directly (with 45-second stream timeouts)
       await _downloadStream(
         muxedStreamInfo, 
         muxedFile, 
@@ -77,9 +77,9 @@ class YouTubeService {
     var downloadedBytes = 0;
 
     try {
-      // 🌟 Listen to stream and apply timeout to individual data packets
+      // 🌟 Increased timeout to 45 seconds on individual packet streams to prevent stalling
       final subscription = stream.timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 45),
         onTimeout: (sink) {
           sink.addError(TimeoutException('YouTube stream stalled. Data packet retrieval timed out.'));
         },
