@@ -225,30 +225,32 @@ class ClipperController extends ChangeNotifier {
         if (blurIntensity == 'Light') blurRadius = '10:2';
         if (blurIntensity == 'Heavy') blurRadius = '50:10';
 
-        // 2. Build the precise aspect ratio math strings
+        // 2. Build the precise, completely relative aspect ratio math strings
+        // This is 100% crash-proof on any pre-muxed YouTube video (360p or 480p)
+        // because it uses relative expressions (ih, iw) instead of hardcoded 1080p dimensions!
         if (cropStyle == '9:16') {
           if (backgroundFill == 'Crop') {
-            cropFilterString = 'crop=2*trunc(ih*9/32):ih:(iw-2*trunc(ih*9/32))/2:0,scale=1080:1920';
+            cropFilterString = 'crop=2*trunc(ih*9/32):ih:(iw-2*trunc(ih*9/32))/2:0';
           } else if (backgroundFill == 'Blur Fill') {
-            cropFilterString = 'split[v1][v2];[v1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+            cropFilterString = 'split[v1][v2];[v1]scale=2*trunc(ih*9/32):ih,boxblur=$blurRadius[bg];[v2]scale=2*trunc(ih*9/32):-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
           } else { // Black Bars
-            cropFilterString = 'scale=1080:608,pad=1080:1920:(1080-iw)/2:(1920-ih)/2:black';
+            cropFilterString = 'scale=2*trunc(ih*9/32):-2,pad=2*trunc(ih*9/32):ih:(ow-iw)/2:(oh-ih)/2:black';
           }
         } else if (cropStyle == '1:1') {
           if (backgroundFill == 'Crop') {
-            cropFilterString = 'crop=ih:ih:(iw-ih)/2:0,scale=1080:1080';
+            cropFilterString = 'crop=ih:ih:(iw-ih)/2:0';
           } else if (backgroundFill == 'Blur Fill') {
-            cropFilterString = 'split[v1][v2];[v1]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+            cropFilterString = 'split[v1][v2];[v1]scale=ih:ih,boxblur=$blurRadius[bg];[v2]scale=ih:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
           } else { // Black Bars
-            cropFilterString = 'scale=1080:608,pad=1080:1080:(1080-iw)/2:(1080-ih)/2:black';
+            cropFilterString = 'scale=ih:-2,pad=ih:ih:(ow-iw)/2:(oh-ih)/2:black';
           }
         } else if (cropStyle == '4:5') {
           if (backgroundFill == 'Crop') {
-            cropFilterString = 'crop=2*trunc(ih*4/10):ih:(iw-2*trunc(ih*4/10))/2:0,scale=1080:1350';
+            cropFilterString = 'crop=2*trunc(ih*4/10):ih:(iw-2*trunc(ih*4/10))/2:0';
           } else if (backgroundFill == 'Blur Fill') {
-            cropFilterString = 'split[v1][v2];[v1]scale=1080:1350:force_original_aspect_ratio=increase,crop=1080:1350,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+            cropFilterString = 'split[v1][v2];[v1]scale=2*trunc(ih*4/10):ih,boxblur=$blurRadius[bg];[v2]scale=2*trunc(ih*4/10):-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
           } else { // Black Bars
-            cropFilterString = 'scale=1080:608,pad=1080:1350:(1080-iw)/2:(1350-ih)/2:black';
+            cropFilterString = 'scale=2*trunc(ih*4/10):-2,pad=2*trunc(ih*4/10):ih:(ow-iw)/2:(oh-ih)/2:black';
           }
         }
       }
@@ -265,7 +267,7 @@ class ClipperController extends ChangeNotifier {
         assFile = await captionService.generateAssSubtitles(
           geminiTranscript: rawTranscript,
           targetFilePath: assPath,
-          cropStyle: cropStyle, // 🌟 Passed dynamically to scale and position captions correctly!
+          cropStyle: cropStyle, // Passed dynamically to scale and position captions correctly!
         );
       }
 

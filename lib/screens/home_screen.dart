@@ -45,7 +45,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   
   List<ClipHistoryEntry> _historyList = [];
   String _savedApiKey = '';
-  String _savedModelName = 'gemini-1.5-flash'; // Default configured model name
+  String _savedModelName = 'gemini-2.5-flash'; // 🌟 Default configured to gemini-2.5-flash
   bool _obscureKey = true;
   bool _isProcessing = false;
   
@@ -54,9 +54,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   File? _historicalClipToPlay; // Persists chosen clip to play from dashboard history
 
   final List<String> _availableModels = [
-    'gemini-1.5-flash', // Safest, universally supported free-tier fallback
-    'gemini-2.5-flash', // Bleeding-edge 2026 high-speed reasoning model
-    'gemini-1.5-pro'    // Deep reasoning model
+    'gemini-2.5-flash', // 🌟 Modern 2026 default high-speed reasoning model
+    'gemini-2.5-pro',   // 🌟 Optional premium choice
   ];
 
   @override
