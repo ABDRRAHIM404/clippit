@@ -41,7 +41,13 @@ class YouTubeService {
         onTimeout: () => throw TimeoutException('Failed to retrieve video metadata from YouTube (Connection Timed Out).'),
       );
       
-      final muxedStreamInfo = manifest.muxed.withHighestBitrate();
+      // 🌟 CRITICAL QUALITY UPGRADE: Searches specifically for the 720p HD pre-muxed stream (1280x720)
+      // to guarantee crisp, sharp HD output, and falls back gracefully to the highest available
+      // bitrate if not found (e.g. on older low-res videos), preventing any crashes!
+      final muxedStreamInfo = manifest.muxed.firstWhere(
+        (s) => s.videoQuality.label == '720p',
+        orElse: () => manifest.muxed.withHighestBitrate(),
+      );
       final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
 
       // If muxed file already exists, return it immediately
