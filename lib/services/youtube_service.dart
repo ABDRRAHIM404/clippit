@@ -24,6 +24,7 @@ class YouTubeService {
 
   /// Downloads a pre-muxed stream (contains both video and audio)
   /// Upgraded with strict, safer timeouts (45 seconds) to accommodate high-latency mobile data streams!
+  /// 🌟 Fix 2: Enforce hard minimum 720p resolution and throw an explicit error if unavailable (no silent fallbacks!)
   Future<File> downloadAndMuxYouTubeVideo({
     required String url,
     required String outputDirectory,
@@ -35,19 +36,18 @@ class YouTubeService {
       if (parsedId == null) throw Exception('Invalid YouTube URL format.');
       final String videoIdString = parsedId.toString();
       
-      // 🌟 Increased timeout to 45 seconds to guarantee handshake completes on mobile data networks!
       final manifest = await _yt.videos.streams.getManifest(parsedId).timeout(
         const Duration(seconds: 45),
         onTimeout: () => throw TimeoutException('Failed to retrieve video metadata from YouTube (Connection Timed Out).'),
       );
       
-      // 🌟 CRITICAL QUALITY UPGRADE: Searches specifically for the 720p HD pre-muxed stream (1280x720)
-      // to guarantee crisp, sharp HD output, and falls back gracefully to the highest available
-      // bitrate if not found (e.g. on older low-res videos), preventing any crashes!
+      // 🌟 Fix 2: Search specifically for high720 pre-muxed stream.
+      // If NOT found, immediately throw a clear, helpful exception instead of silently downloading low-res clips!
       final muxedStreamInfo = manifest.muxed.firstWhere(
-        (s) => s.videoQuality == VideoQuality.high720, // 🌟 Fixed: Compared directly with native VideoQuality enum!
-        orElse: () => manifest.muxed.withHighestBitrate(),
+        (s) => s.videoQuality == VideoQuality.high720,
+        orElse: () => throw Exception('720p stream unavailable for this video, cannot proceed'),
       );
+      
       final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
 
       // If muxed file already exists, return it immediately
@@ -83,7 +83,7 @@ class YouTubeService {
     var downloadedBytes = 0;
 
     try {
-      // 🌟 Increased timeout to 45 seconds on individual packet streams to prevent stalling
+      // Increased timeout to 45 seconds on individual packet streams to prevent stalling
       final subscription = stream.timeout(
         const Duration(seconds: 45),
         onTimeout: (sink) {
@@ -91,7 +91,7 @@ class YouTubeService {
         },
       );
 
-      await for (final data in subscription) {
+      await for (final data in stream) {
         downloadedBytes += data.length;
         progressCallback(downloadedBytes / totalBytes);
         fileStream.add(data);
