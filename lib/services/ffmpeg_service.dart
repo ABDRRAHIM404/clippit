@@ -65,9 +65,9 @@ class FFmpegService {
 
     // 2. ASS Subtitle Burn-In
     if (assSubtitleFile != null) {
-      // libass utilizes the "ass" filter. Crucial: escaping paths for platform safety.
+      // subtitles utilizes the subtitles filter which is more robust and has better font fallback mappings on Android.
       final escapedAssPath = assSubtitleFile.path.replaceAll('\\', '/').replaceAll(':', '\\:');
-      filters.add("ass='$escapedAssPath'");
+      filters.add("subtitles='$escapedAssPath'");
     }
 
     // 3. Watermark Overlay

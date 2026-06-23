@@ -14,23 +14,28 @@ class CaptionService {
     // 1. Resolve dynamic resolutions and vertical margin placement
     int resX = 1080;
     int resY = 1920;
-    int marginV = 160; // Safe bottom placement for 9:16
+    // 🌟 SAFE-ZONE COMPLIANCE:
+    // Placements like 80px or 100px get completely covered by Android's navigation pill/bar!
+    // We bump Margins to the safe-zone area (above nav bars, matching TikTok/Reels standards).
+    int marginV = 360; // 360px up from bottom for portrait 9:16 (Perfect bottom-third safe zone!)
 
     if (cropStyle == 'Keep 16:9') {
       resX = 1920;
       resY = 1080;
-      marginV = 80; // Safe bottom placement for landscape 16:9
+      marginV = 120; // Safe bottom placement for landscape 16:9
     } else if (cropStyle == '1:1') {
       resX = 1080;
       resY = 1080;
-      marginV = 80; // Safe bottom placement for square 1:1
+      marginV = 180; // Safe bottom placement for square 1:1
     } else if (cropStyle == '4:5') {
       resX = 1080;
       resY = 1350;
-      marginV = 100; // Safe bottom placement for social 4:5
+      marginV = 220; // Safe bottom placement for social 4:5
     }
 
-    // 2. Setup Standard ASS Styles Header (Using 'sans-serif' for guaranteed native Android font mapping)
+    // 2. Setup Standard ASS Styles Header 
+    // - Using 'sans-serif' for guaranteed native Android font mapping
+    // - Bumped Fontsize from 64 to 84 for professional legibility
     buffer.write('''[Script Info]
 ScriptType: v4.00+
 PlayResX: $resX
@@ -39,7 +44,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,sans-serif,64,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,1.5,$marginV,10,10,10,1
+Style: Default,sans-serif,84,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,1.5,$marginV,10,10,10,1
 ''');
     // Alignment 2 is Bottom-Center.
     
