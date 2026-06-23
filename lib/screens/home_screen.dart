@@ -24,10 +24,21 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.dbService});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context) {
+    return _HomeScreenContent(dbService: dbService);
+  }
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenContent extends StatefulWidget {
+  final DbService dbService;
+
+  const _HomeScreenContent({required this.dbService});
+
+  @override
+  State<_HomeScreenContent> createState() => _HomeScreenContentState();
+}
+
+class _HomeScreenContentState extends State<_HomeScreenContent> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -40,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   ClipperController? _clipperController;
   ClipSuggestion? _selectedSuggestionForEdit;
-  File? _historicalClipToPlay; // 🌟 Persists chosen clip to play from dashboard history
+  File? _historicalClipToPlay; // Persists chosen clip to play from dashboard history
 
   final List<String> _availableModels = [
     'gemini-1.5-flash', // Safest, universally supported free-tier fallback
@@ -377,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      // B. Show Highlights Panel when suggestions have loaded
+      // B. Show Highlights Panel when suggestions have loaded (Now with Back Button reset!)
       if (status == PipelineStatus.showingHighlights && _selectedSuggestionForEdit == null) {
         return HighlightsScreen(
           suggestions: _clipperController!.suggestions,
@@ -386,6 +397,9 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _selectedSuggestionForEdit = clip;
             });
+          },
+          onBackPressed: () {
+            _clipperController!.reset(); // Safe return back to Idle dashboard!
           },
         );
       }
@@ -422,7 +436,9 @@ class _HomeScreenState extends State<HomeScreen> {
           onExportTriggered: ({
             required double startSeconds,
             required double endSeconds,
-            required bool enableCrop,
+            required String cropStyle,
+            required String backgroundFill,
+            required String blurIntensity,
             required bool enableCaptions,
             required String selectedLanguage,
           }) {
@@ -432,7 +448,9 @@ class _HomeScreenState extends State<HomeScreen> {
             _clipperController!.renderAndExportClip(
               startSeconds: startSeconds,
               endSeconds: endSeconds,
-              enableCrop: enableCrop,
+              cropStyle: cropStyle,
+              backgroundFill: backgroundFill,
+              blurIntensity: blurIntensity,
               enableCaptions: enableCaptions,
               selectedLanguage: selectedLanguage,
             );
@@ -442,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // D. Show the Video Player Export/Share Sheet on successful rendering
       if (status == PipelineStatus.completed) {
-        final File? file = _clipperController!.renderedClipFile; // 🌟 Passed the finished rendered clip instead of full deleted temp source!
+        final File? file = _clipperController!.renderedClipFile; // Passed the finished rendered clip!
         return ExportScreen(
           renderedClipFile: file!,
           clipTitle: _clipperController!.activeSourceTitle,
@@ -711,8 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               isThreeLine: true,
               onTap: () {
-                // 🌟 EXTRA CREDIT UPGRADE: 
-                // Tapping any historical clip card now instantly plays it in your full-screen vertical player!
+                // Play historical saved clip directly inside player overlay
                 setState(() {
                   _historicalClipToPlay = File(item.localVideoPath);
                 });

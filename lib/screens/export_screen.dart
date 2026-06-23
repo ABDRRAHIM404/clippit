@@ -50,7 +50,7 @@ class _ExportScreenState extends State<ExportScreen> {
     super.dispose();
   }
 
-  Future<void> _shareClip(String platformName) async {
+  Future<void> _shareClip() async {
     // Uses the official share_plus package to trigger native sharing trays
     final XFile file = XFile(widget.renderedClipFile.path);
     await Share.shareXFiles(
@@ -74,10 +74,9 @@ class _ExportScreenState extends State<ExportScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           children: [
-            _buildVerticalVideoPreview(),
-            const SizedBox(height: 28),
-            _buildPlatformPresetSelectors(),
-            const SizedBox(height: 28),
+            const SizedBox(height: 10),
+            _buildVideoPreviewContainer(),
+            const SizedBox(height: 40),
             _buildActionButtons(),
           ],
         ),
@@ -85,10 +84,9 @@ class _ExportScreenState extends State<ExportScreen> {
     );
   }
 
-  Widget _buildVerticalVideoPreview() {
+  Widget _buildVideoPreviewContainer() {
     return Container(
-      height: 380,
-      width: 380 * (9 / 16), // Force 9:16 vertical box
+      constraints: const BoxConstraints(maxHeight: 400),
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.circular(16),
@@ -103,105 +101,39 @@ class _ExportScreenState extends State<ExportScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: _isPlayerInitialized
-          ? Stack(
-              alignment: Alignment.center,
-              children: [
-                VideoPlayer(_playerController),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _playerController.value.isPlaying
-                          ? _playerController.pause()
-                          : _playerController.play();
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _playerController.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 24,
+          ? AspectRatio(
+              aspectRatio: _playerController.value.aspectRatio, // 🌟 Dynamically adapts to 16:9, 9:16, 1:1, or 4:5!
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  VideoPlayer(_playerController),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _playerController.value.isPlaying
+                            ? _playerController.pause()
+                            : _playerController.play();
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _playerController.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             )
           : const Center(
               child: CircularProgressIndicator(color: AppColors.accentNeon),
             ),
-    );
-  }
-
-  Widget _buildPlatformPresetSelectors() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Quick Export Presets',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildPresetCard(
-              icon: Icons.music_note,
-              label: 'TikTok',
-              color: const Color(0xFFFE2C55),
-              onTap: () => _shareClip('TikTok'),
-            ),
-            _buildPresetCard(
-              icon: Icons.video_library_rounded,
-              label: 'YouTube Shorts',
-              color: const Color(0xFFFF0000),
-              onTap: () => _shareClip('YouTube Shorts'),
-            ),
-            _buildPresetCard(
-              icon: Icons.camera_alt,
-              label: 'Instagram Reels',
-              color: const Color(0xFFE1306C),
-              onTap: () => _shareClip('Instagram Reels'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPresetCard({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border, width: 1),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -213,7 +145,7 @@ class _ExportScreenState extends State<ExportScreen> {
           child: ElevatedButton.icon(
             icon: const Icon(Icons.share, size: 20),
             label: const Text('Open System Share Sheet'),
-            onPressed: () => _shareClip('Generic'),
+            onPressed: _shareClip, // 🌟 Directly share the finished resolution file!
           ),
         ),
         const SizedBox(height: 12),

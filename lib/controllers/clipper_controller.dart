@@ -40,7 +40,7 @@ class ClipperController extends ChangeNotifier {
 
   List<ClipSuggestion> _suggestions = [];
   File? _processedSourceFile;
-  File? _renderedClipFile; // 🌟 Added to persist the finished render clip!
+  File? _renderedClipFile; // Persists the finished render clip
   String _activeSourceTitle = '';
   String _activeSourceIdOrHash = '';
 
@@ -51,7 +51,7 @@ class ClipperController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   List<ClipSuggestion> get suggestions => _suggestions;
   File? get processedSourceFile => _processedSourceFile;
-  File? get renderedClipFile => _renderedClipFile; // 🌟 Getter for finished crop clip!
+  File? get renderedClipFile => _renderedClipFile;
   String get activeSourceTitle => _activeSourceTitle;
 
   ClipperController({
@@ -86,7 +86,6 @@ class ClipperController extends ChangeNotifier {
       final cached = dbService.getCachedSuggestions(videoId);
       if (cached != null) {
         _suggestions = cached;
-        // Broadcast suggestions instantly to UI (Instant Load UX!)
         _updateState(PipelineStatus.showingHighlights, progress: 1.0, message: 'Loaded suggestions from cache');
         
         // Start downloading the muxed video silently in the background
@@ -183,7 +182,9 @@ class ClipperController extends ChangeNotifier {
   Future<File?> renderAndExportClip({
     required double startSeconds,
     required double endSeconds,
-    required bool enableCrop,
+    required String cropStyle,       // 'Keep 16:9', '9:16', '1:1', '4:5'
+    required String backgroundFill,   // 'Blur Fill', 'Crop', 'Black Bars'
+    required String blurIntensity,   // 'Light', 'Medium', 'Heavy'
     required bool enableCaptions,
     required String selectedLanguage,
   }) async {
@@ -215,21 +216,41 @@ class ClipperController extends ChangeNotifier {
         targetPath: trimmedPath,
       );
 
-      // STEP 2: Google ML Kit Face/Speaker Tracking (if enabled)
-      if (enableCrop) {
-        _updateState(PipelineStatus.trackingFaces, progress: 0.3, message: 'Running Face Detector...');
+      // STEP 2: Configure Dynamic Aspect Ratio Crop Filter Chains
+      if (cropStyle != 'Keep 16:9') {
+        _updateState(PipelineStatus.trackingFaces, progress: 0.3, message: 'Configuring aspect ratio layers...');
         
-        // 🌟 100% ROBUST & UNIVERSAL RELATIVE CROP FILTER:
-        // Hardcoding 608:1080 crop sizes crashes immediately on any pre-muxed YouTube video
-        // because the source height is only 360p or 720p (crop dimensions cannot exceed input dimensions!).
-        //
-        // By using FFmpeg's relative evaluation syntax:
-        // - out_h = ih (inherits full input height cleanly: 360, 720, or 1080)
-        // - out_w = 2 * trunc(ih * 9 / 32) (calculates a perfect 9:16 proportional width and guarantees an even integer divisible by 2 for x264!)
-        // - x_offset = (iw - out_w) / 2 (centers the horizontal camera coordinate flawlessly)
-        //
-        // This is 100% immune to resolution changes, never throws out-of-bounds, and compiles perfectly!
-        cropFilterString = 'crop=2*trunc(ih*9/32):ih:(iw-2*trunc(ih*9/32))/2:0';
+        // 1. Resolve BoxBlur value based on selected intensity
+        String blurRadius = '25:5'; // Medium
+        if (blurIntensity == 'Light') blurRadius = '10:2';
+        if (blurIntensity == 'Heavy') blurRadius = '50:10';
+
+        // 2. Build the precise aspect ratio math strings
+        if (cropStyle == '9:16') {
+          if (backgroundFill == 'Crop') {
+            cropFilterString = 'crop=2*trunc(ih*9/32):ih:(iw-2*trunc(ih*9/32))/2:0,scale=1080:1920';
+          } else if (backgroundFill == 'Blur Fill') {
+            cropFilterString = 'split[v1][v2];[v1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+          } else { // Black Bars
+            cropFilterString = 'scale=1080:608,pad=1080:1920:(1080-iw)/2:(1920-ih)/2:black';
+          }
+        } else if (cropStyle == '1:1') {
+          if (backgroundFill == 'Crop') {
+            cropFilterString = 'crop=ih:ih:(iw-ih)/2:0,scale=1080:1080';
+          } else if (backgroundFill == 'Blur Fill') {
+            cropFilterString = 'split[v1][v2];[v1]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+          } else { // Black Bars
+            cropFilterString = 'scale=1080:608,pad=1080:1080:(1080-iw)/2:(1080-ih)/2:black';
+          }
+        } else if (cropStyle == '4:5') {
+          if (backgroundFill == 'Crop') {
+            cropFilterString = 'crop=2*trunc(ih*4/10):ih:(iw-2*trunc(ih*4/10))/2:0,scale=1080:1350';
+          } else if (backgroundFill == 'Blur Fill') {
+            cropFilterString = 'split[v1][v2];[v1]scale=1080:1350:force_original_aspect_ratio=increase,crop=1080:1350,boxblur=$blurRadius[bg];[v2]scale=1080:608:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2';
+          } else { // Black Bars
+            cropFilterString = 'scale=1080:608,pad=1080:1350:(1080-iw)/2:(1350-ih)/2:black';
+          }
+        }
       }
 
       // STEP 3: Pass 2 AI Word-level transcription (if enabled)
@@ -252,12 +273,12 @@ class ClipperController extends ChangeNotifier {
       final File renderedClip = await ffmpegService.renderFinalClip(
         trimmedClip: trimmedFile,
         targetPath: finalRenderPath,
-        isVertical: enableCrop,
+        isVertical: cropStyle != 'Keep 16:9',
         cropFilter: cropFilterString,
         assSubtitleFile: assFile,
       );
-      
-      _renderedClipFile = renderedClip; // 🌟 Persist the path of the newly finished render clip!
+
+      _renderedClipFile = renderedClip;
 
       // STEP 5: Generate Clip Thumbnail for History Dashboard
       _updateState(PipelineStatus.renderingFinal, progress: 0.95, message: 'Generating card thumbnails...');
@@ -299,7 +320,7 @@ class ClipperController extends ChangeNotifier {
     _progress = 0.0;
     _suggestions = [];
     _processedSourceFile = null;
-    _renderedClipFile = null; // 🌟 Reset render path
+    _renderedClipFile = null;
     _activeSourceTitle = '';
     _activeSourceIdOrHash = '';
     _errorMessage = null;
