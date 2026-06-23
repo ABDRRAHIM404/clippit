@@ -7,6 +7,7 @@ import '../models/clip_suggestion.dart';
 class EditScreen extends StatefulWidget {
   final File sourceVideoFile;
   final ClipSuggestion initialSuggestion;
+  final VoidCallback onBackPressed; // 🌟 Added callback to return safely to HighlightsScreen
   final Function({
     required double startSeconds,
     required double endSeconds,
@@ -21,6 +22,7 @@ class EditScreen extends StatefulWidget {
     super.key,
     required this.sourceVideoFile,
     required this.initialSuggestion,
+    required this.onBackPressed,
     required this.onExportTriggered,
   });
 
@@ -89,6 +91,10 @@ class _EditScreenState extends State<EditScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Fine-Tune & Adjust'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back), // 🌟 Added a standard Back/Return arrow!
+          onPressed: widget.onBackPressed,    // 🌟 Safely returns user to Suggestions view!
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.textSecondary),

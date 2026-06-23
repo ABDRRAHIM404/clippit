@@ -66,7 +66,7 @@ class _ExportScreenState extends State<ExportScreen> {
       appBar: AppBar(
         title: const Text('Render Complete'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back), // 🌟 Replaced Home icon with standard Back/Return arrow!
           onPressed: widget.onReturnHome,
         ),
       ),

@@ -433,6 +433,11 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
         return EditScreen(
           sourceVideoFile: _clipperController!.processedSourceFile!,
           initialSuggestion: _selectedSuggestionForEdit!,
+          onBackPressed: () { // 🌟 Safely returns back to suggested highlights list view!
+            setState(() {
+              _selectedSuggestionForEdit = null;
+            });
+          },
           onExportTriggered: ({
             required double startSeconds,
             required double endSeconds,

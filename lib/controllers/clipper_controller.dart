@@ -265,6 +265,7 @@ class ClipperController extends ChangeNotifier {
         assFile = await captionService.generateAssSubtitles(
           geminiTranscript: rawTranscript,
           targetFilePath: assPath,
+          cropStyle: cropStyle, // 🌟 Passed dynamically to scale and position captions correctly!
         );
       }
 
