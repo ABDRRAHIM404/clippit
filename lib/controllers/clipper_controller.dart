@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart'; // 🌟 Added for safe Isolate hashing conversion
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
 import '../services/youtube_service.dart';
@@ -65,7 +66,6 @@ class ClipperController extends ChangeNotifier {
     required this.storageService,
     required this.dbService,
   }) {
-    // 🌟 Item 7: Guaranteed fallback cleanup on startup to purge any leftover aborted/crashed session files
     storageService.cleanLeftoverTempFilesOnStartup();
   }
 
@@ -115,6 +115,33 @@ class ClipperController extends ChangeNotifier {
     }
   }
 
+  /// 🌟 Bug 1 Fix: Fetches and downloads the pre-muxed stream AFTER clip selection,
+  /// immediately before transitioning into the EditScreen sliders workspace.
+  /// Includes full try-catch blocks to catch stalling and surface clear errors!
+  Future<void> prepareSourceVideoForEdit() async {
+    if (_processedSourceFile != null) return; // Video already downloaded!
+    if (_youtubeUrl == null) return;          // Local file path, already on disk!
+
+    _updateState(PipelineStatus.downloading, progress: 0.0, message: 'Fetching stream preview from YouTube...');
+    try {
+      final tempDir = await storageService.getAppTempDirectory();
+      
+      final File downloadedFile = await youtubeService.downloadAndMuxYouTubeVideo(
+        url: _youtubeUrl!,
+        outputDirectory: tempDir.path,
+        ffmpegService: ffmpegService,
+        onProgress: (p) {
+          _updateState(PipelineStatus.downloading, progress: p, message: 'Downloading pre-muxed stream...');
+        },
+      );
+      
+      _processedSourceFile = downloadedFile;
+      _updateState(PipelineStatus.showingHighlights, progress: 1.0, message: 'Video assets ready');
+    } catch (e) {
+      _handleFailure('Failed to fetch video preview from YouTube: $e');
+    }
+  }
+
   /// Entry Point: Triggered when user picks a local file
   /// 🌟 Item 4 Optimization: Compress local files over 200MB to 360p before uploading to Gemini.
   Future<void> processLocalFileInput(File file, String displayName) async {
@@ -125,9 +152,13 @@ class ClipperController extends ChangeNotifier {
     _youtubeUrl = null;
 
     try {
-      // 🌟 Item 2: Move heavy file hashing into a separate Dart Isolate
+      // 🌟 Bug 2 Fix: Extract file path string and compute SHA-256 inside a clean Isolate.
+      // We pass ONLY the plain string `filePath` across the isolate boundaries,
+      // completely isolating DbService, open Hive VM syncs, and future closures on the main thread!
+      final String filePath = file.path;
       final String fileHash = await Isolate.run(() async {
-        return await storageService.calculateFileHash(file);
+        final bytes = await File(filePath).readAsBytes();
+        return sha256.convert(bytes).toString();
       });
       _activeSourceIdOrHash = fileHash;
 
@@ -149,7 +180,6 @@ class ClipperController extends ChangeNotifier {
         final tempDir = await storageService.getAppTempDirectory();
         final String compressedPath = '${tempDir.path}/compress_${DateTime.now().millisecondsSinceEpoch}.mp4';
         
-        // Fast hardware or software scale to 360p
         final File compressedFile = await ffmpegService.compressVideoTo360p(
           inputFile: file,
           outputPath: compressedPath,
@@ -218,21 +248,6 @@ class ClipperController extends ChangeNotifier {
     String? cropFilterString;
 
     try {
-      // 🌟 Item 3: If we are on the YouTube path, download the muxed stream ONLY now before cutting!
-      if (_processedSourceFile == null && _youtubeUrl != null) {
-        _updateState(PipelineStatus.downloading, progress: 0.1, message: 'Downloading segment streams from YouTube...');
-        
-        final File downloadedFile = await youtubeService.downloadAndMuxYouTubeVideo(
-          url: _youtubeUrl!,
-          outputDirectory: tempDir.path,
-          ffmpegService: ffmpegService,
-          onProgress: (p) {
-            _updateState(PipelineStatus.downloading, progress: p, message: 'Downloading pre-muxed stream...');
-          },
-        );
-        _processedSourceFile = downloadedFile;
-      }
-
       if (_processedSourceFile == null) {
         throw Exception('Source video file could not be retrieved.');
       }
@@ -330,7 +345,6 @@ class ClipperController extends ChangeNotifier {
 
       // 🌟 Item 7: Guaranteed automatic clean up of downloaded source, trimmed segments, and intermediate temp files
       await storageService.clearAllTemporaryFiles();
-      // If we downloaded a YouTube video stream, delete it now so it consumes ZERO permanent device storage
       if (_youtubeUrl != null && _processedSourceFile != null) {
         try {
           if (await _processedSourceFile!.exists()) await _processedSourceFile!.delete();
