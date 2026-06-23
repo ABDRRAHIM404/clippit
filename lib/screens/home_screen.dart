@@ -45,7 +45,6 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   
   List<ClipHistoryEntry> _historyList = [];
   String _savedApiKey = '';
-  String _savedModelName = 'gemini-2.5-flash'; // 🌟 Default configured to gemini-2.5-flash
   bool _obscureKey = true;
   bool _isProcessing = false;
   
@@ -53,10 +52,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   ClipSuggestion? _selectedSuggestionForEdit;
   File? _historicalClipToPlay; // Persists chosen clip to play from dashboard history
 
-  final List<String> _availableModels = [
-    'gemini-2.5-flash', // 🌟 Modern 2026 default high-speed reasoning model
-    'gemini-2.5-pro',   // 🌟 Optional premium choice
-  ];
+  // 🌟 Item 8: Lazy loading pagination offsets
+  int _loadedHistoryCount = 10;
 
   @override
   void initState() {
@@ -65,33 +62,30 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
     _loadSavedSettings();
   }
 
-  // Load saved API key & Model configurations from local device preferences
+  // Load saved API key from local device preferences
   Future<void> _loadSavedSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _savedApiKey = prefs.getString('gemini_api_key') ?? '';
-      _savedModelName = prefs.getString('gemini_model_name') ?? 'gemini-1.5-flash';
       _apiKeyController.text = _savedApiKey;
       _initClipperController();
     });
   }
 
-  // Persists the Gemini settings locally
-  Future<void> _saveSettings(String key, String modelName) async {
+  // Persists the Gemini API key locally
+  Future<void> _saveSettings(String key) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', key.trim());
-    await prefs.setString('gemini_model_name', modelName);
     
     setState(() {
       _savedApiKey = key.trim();
-      _savedModelName = modelName;
       _initClipperController();
     });
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Settings successfully saved locally!'),
+          content: Text('Gemini API Key successfully saved locally!'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -99,14 +93,15 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   }
 
   // Initializes our state controller only if an API key exists
+  // Uses 'gemini-2.5-flash' directly as the optimal default reasoning engine
   void _initClipperController() {
     if (_savedApiKey.isNotEmpty) {
       _clipperController = ClipperController(
         youtubeService: YouTubeService(),
         geminiService: GeminiService(
           apiKey: _savedApiKey,
-          analysisModelName: _savedModelName,
-          transcriptionModelName: _savedModelName, // Match user selected model for transcription!
+          analysisModelName: 'gemini-2.5-flash',      // Locked to optimal 2026 Flash model!
+          transcriptionModelName: 'gemini-2.5-flash', // Locked to optimal 2026 Flash model!
         ),
         ffmpegService: FFmpegService(),
         captionService: CaptionService(),
@@ -204,10 +199,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
     }
   }
 
-  // Opens settings panel to manage Keys and choose models dynamically
+  // Opens settings panel to manage Keys securely (Dropdown selection purged!)
   void _openSettingsBottomSheet() {
-    String localSelectedModel = _savedModelName;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -281,49 +274,9 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  
-                  // MODEL SELECTION DROPDOWN
-                  const Text(
-                    'AI Highlight Model',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border, width: 1),
-                    ),
-                    child: DropdownButton<String>(
-                      value: localSelectedModel,
-                      isExpanded: true,
-                      underline: const SizedBox(),
-                      dropdownColor: AppColors.surface,
-                      items: _availableModels.map((String model) {
-                        return DropdownMenuItem<String>(
-                          value: model,
-                          child: Text(
-                            model,
-                            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (String? val) {
-                        if (val != null) {
-                          setModalState(() {
-                            localSelectedModel = val;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  
                   const SizedBox(height: 12),
                   const Text(
-                    'Your API key and model choices are stored 100% locally on your phone filesystem and are only used to talk directly to Gemini APIs.',
+                    'Your API key is stored 100% locally on your phone filesystem and is only used to talk directly to Gemini APIs. The app is automatically optimized to use the ultra-fast gemini-2.5-flash engine.',
                     style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.3),
                   ),
                   const SizedBox(height: 28),
@@ -331,7 +284,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        _saveSettings(_apiKeyController.text, localSelectedModel);
+                        _saveSettings(_apiKeyController.text);
                         Navigator.pop(context);
                       },
                       child: const Text('Save & Close'),
@@ -354,9 +307,59 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 STATE-BASED ROUTING LOGIC
+    // 🌟 NATIVE SYSTEM BACK GESTURE / PHYSICAL BACK BUTTON INTERCEPTION (PopScope)
+    // - Prevents swiping back from closing or exiting your app!
+    // - Instead, seamlessly routes back step-by-step through your active view screens.
+    bool canSystemPop = true;
+    if (_historicalClipToPlay != null) {
+      canSystemPop = false;
+    } else if (_clipperController != null) {
+      final status = _clipperController!.status;
+      if (status == PipelineStatus.showingHighlights ||
+          status == PipelineStatus.completed ||
+          status == PipelineStatus.error) {
+        canSystemPop = false;
+      }
+    }
 
-    // Play historical saved clip directly inside player overlay
+    return PopScope(
+      canPop: canSystemPop,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return; // If system already popped (app is exiting), let it exit
+
+        // 🌟 CUSTOM BACK NAVIGATION MATRIX
+        if (_historicalClipToPlay != null) {
+          setState(() {
+            _historicalClipToPlay = null; // Exit fullscreen history player
+          });
+          return;
+        }
+
+        if (_clipperController != null) {
+          final status = _clipperController!.status;
+
+          // 1. If on EditScreen (Sliders view) -> Go back to Highlights suggested cards list
+          if (_selectedSuggestionForEdit != null && status == PipelineStatus.showingHighlights) {
+            setState(() {
+              _selectedSuggestionForEdit = null;
+            });
+            return;
+          }
+
+          // 2. If on Highlights list or Export player screen -> Go back to Idle Home Dashboard
+          if (status == PipelineStatus.showingHighlights ||
+              status == PipelineStatus.completed ||
+              status == PipelineStatus.error) {
+            _clipperController!.reset();
+            return;
+          }
+        }
+      },
+      child: _buildActiveRouteBody(context), // Standard view layout generator
+    );
+  }
+
+  Widget _buildActiveRouteBody(BuildContext context) {
     if (_historicalClipToPlay != null) {
       return ExportScreen(
         renderedClipFile: _historicalClipToPlay!,
@@ -387,7 +390,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
         );
       }
 
-      // B. Show Highlights Panel when suggestions have loaded (Now with Back Button reset!)
+      // B. Show Highlights Panel when suggestions have loaded (With Back Button reset!)
       if (status == PipelineStatus.showingHighlights && _selectedSuggestionForEdit == null) {
         return HighlightsScreen(
           suggestions: _clipperController!.suggestions,
@@ -432,7 +435,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
         return EditScreen(
           sourceVideoFile: _clipperController!.processedSourceFile!,
           initialSuggestion: _selectedSuggestionForEdit!,
-          onBackPressed: () { // 🌟 Safely returns back to suggested highlights list view!
+          onBackPressed: () { // Safely returns back to suggested highlights list view!
             setState(() {
               _selectedSuggestionForEdit = null;
             });
@@ -702,50 +705,74 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
       );
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _historyList.length,
-      itemBuilder: (context, index) {
-        final item = _historyList[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
-          child: Card(
-            child: ListTile(
-              leading: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(8),
+    // 🌟 Item 8: Segment list to show only the paginated count initially
+    final paginatedList = _historyList.take(_loadedHistoryCount).toList();
+
+    return Column(
+      children: [
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: paginatedList.length,
+          itemBuilder: (context, index) {
+            final item = paginatedList[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Card(
+                child: ListTile(
+                  leading: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.play_circle_fill, color: AppColors.textSecondary, size: 32),
+                  ),
+                  title: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                  ),
+                  subtitle: Text(
+                    'Source: ${item.sourcePathOrUrl.length > 24 ? "${item.sourcePathOrUrl.substring(0, 24)}..." : item.sourcePathOrUrl}\nDuration: ${(item.endTime - item.startTime).toStringAsFixed(1)}s',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  isThreeLine: true,
+                  onTap: () {
+                    setState(() {
+                      _historicalClipToPlay = File(item.localVideoPath);
+                    });
+                  },
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                    onPressed: () => _deleteHistoryItem(item.id),
+                  ),
                 ),
-                child: const Icon(Icons.play_circle_fill, color: AppColors.textSecondary, size: 32),
               ),
-              title: Text(
-                item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+            );
+          },
+        ),
+        
+        // 🌟 Item 8: Render a high-retention "Load More" tile if there are more clips to reveal!
+        if (_historyList.length > _loadedHistoryCount)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: TextButton.icon(
+              icon: const Icon(Icons.expand_more, color: AppColors.accentNeon),
+              label: const Text(
+                'Load Older Clips',
+                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
               ),
-              subtitle: Text(
-                'Source: ${item.sourcePathOrUrl.length > 24 ? "${item.sourcePathOrUrl.substring(0, 24)}..." : item.sourcePathOrUrl}\nDuration: ${(item.endTime - item.startTime).toStringAsFixed(1)}s',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-              isThreeLine: true,
-              onTap: () {
-                // Play historical saved clip directly inside player overlay
+              onPressed: () {
                 setState(() {
-                  _historicalClipToPlay = File(item.localVideoPath);
+                  _loadedHistoryCount += 10; // Paginate next 10 items
                 });
               },
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                onPressed: () => _deleteHistoryItem(item.id),
-              ),
             ),
           ),
-        );
-      },
+      ],
     );
   }
 }

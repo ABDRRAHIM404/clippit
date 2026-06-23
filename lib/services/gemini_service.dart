@@ -2,21 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart'; // 🌟 Added for safe MediaType parsing!
+import 'package:http_parser/http_parser.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/clip_suggestion.dart';
 
 class GeminiService {
   final String apiKey;
-  final String analysisModelName;       // e.g. 'gemini-1.5-pro' or 'gemini-2.5-flash'
-  final String transcriptionModelName;  // e.g. 'gemini-1.5-flash'
+  final String analysisModelName;       // e.g. 'gemini-2.5-flash'
+  final String transcriptionModelName;  // e.g. 'gemini-2.5-flash'
   
   late final GenerativeModel _model;
   late final GenerativeModel _transcribeModel;
 
   GeminiService({
     required this.apiKey,
-    this.analysisModelName = 'gemini-2.5-flash', // 🌟 Changed default to gemini-2.5-flash!
+    this.analysisModelName = 'gemini-2.5-flash',
     this.transcriptionModelName = 'gemini-2.5-flash',
   }) {
     // 1. Configure Pass 1 Model with JSON schema constraints
@@ -84,7 +84,6 @@ class GeminiService {
 
       onStatusUpdate?.call('Generating highlights using ${analysisModelName}...');
       
-      // Use built-in FilePart instead of custom sealed class extension
       final filePart = FilePart(Uri.parse(fileUri));
       
       final response = await _model.generateContent([
@@ -102,10 +101,31 @@ class GeminiService {
       final List<dynamic> highlightsJson = parsed['highlights'];
       return highlightsJson.map((x) => ClipSuggestion.fromJson(x)).toList();
     } finally {
-      // Always cleanup cloud file to avoid hitting the 20GB free storage limit
       onStatusUpdate?.call('Cleaning up temporary cloud storage files...');
       await _deleteFileFromApi(apiName);
     }
+  }
+
+  /// Pass 1: Analysis for YouTube URLs directly (Item 3 - zero download/upload bandwidth)
+  Future<List<ClipSuggestion>> analyzeVideoUrl(String youtubeUrl, {Function(String status)? onStatusUpdate}) async {
+    onStatusUpdate?.call('Asking Gemini to fetch and analyze YouTube video directly...');
+
+    final filePart = FilePart(Uri.parse(youtubeUrl));
+    
+    final response = await _model.generateContent([
+      Content.multi([
+        filePart,
+        TextPart('Analyze this video and return the top viral highlights. Keep recommended duration strictly between 60 and 75 seconds.')
+      ])
+    ]);
+
+    if (response.text == null) {
+      throw Exception('Received empty text response from Gemini analysis.');
+    }
+
+    final Map<String, dynamic> parsed = jsonDecode(response.text!);
+    final List<dynamic> highlightsJson = parsed['highlights'];
+    return highlightsJson.map((x) => ClipSuggestion.fromJson(x)).toList();
   }
 
   /// Pass 2: Clip Subtitle Transcription
@@ -121,7 +141,6 @@ class GeminiService {
 
       onStatusUpdate?.call('Transcribing relative audio streams...');
       
-      // Use built-in FilePart instead of custom sealed class extension
       final filePart = FilePart(Uri.parse(fileUri));
       
       final response = await _transcribeModel.generateContent([
@@ -149,11 +168,8 @@ class GeminiService {
     );
 
     final request = http.MultipartRequest('POST', uploadUrl);
-    
-    // 1. Add headers
     request.headers['X-Goog-Upload-Protocol'] = 'multipart';
     
-    // 2. Add metadata part
     final metadataJson = jsonEncode({
       'file': {
         'displayName': file.path.split('/').last,
@@ -164,11 +180,10 @@ class GeminiService {
       http.MultipartFile.fromString(
         'metadata',
         metadataJson,
-        contentType: MediaType('application', 'json'), // 🌟 Fixed runtime type mismatch!
+        contentType: MediaType('application', 'json'),
       ),
     );
 
-    // 3. Add raw file part
     final stream = http.ByteStream(file.openRead());
     final length = await file.length();
     final multipartFile = http.MultipartFile(
@@ -176,7 +191,7 @@ class GeminiService {
       stream,
       length,
       filename: file.path.split('/').last,
-      contentType: MediaType('video', 'mp4'), // 🌟 Explicitly declare video/mp4 to bypass octet-stream error!
+      contentType: MediaType('video', 'mp4'),
     );
     request.files.add(multipartFile);
 
@@ -190,7 +205,7 @@ class GeminiService {
     final data = jsonDecode(response.body);
     return {
       'fileUri': data['file']['uri'] as String,
-      'apiName': data['file']['name'] as String, // Name syntax: "files/abc123xyz"
+      'apiName': data['file']['name'] as String,
     };
   }
 
@@ -208,12 +223,11 @@ class GeminiService {
       final String state = data['state'] ?? 'PROCESSING';
 
       if (state == 'ACTIVE') {
-        break; // File is successfully parsed and ready for prompt operations
+        break;
       } else if (state == 'FAILED') {
         throw Exception('Gemini Cloud Video processing failed on server.');
       }
 
-      // Backoff delay before checking again
       await Future.delayed(const Duration(seconds: 4));
     }
   }

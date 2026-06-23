@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
@@ -43,6 +44,7 @@ class ClipperController extends ChangeNotifier {
   File? _renderedClipFile; // Persists the finished render clip
   String _activeSourceTitle = '';
   String _activeSourceIdOrHash = '';
+  String? _youtubeUrl;     // Persists the parsed YouTube URL if using the link path
 
   // Getters
   PipelineStatus get status => _status;
@@ -62,7 +64,10 @@ class ClipperController extends ChangeNotifier {
     required this.faceTrackingService,
     required this.storageService,
     required this.dbService,
-  });
+  }) {
+    // 🌟 Item 7: Guaranteed fallback cleanup on startup to purge any leftover aborted/crashed session files
+    storageService.cleanLeftoverTempFilesOnStartup();
+  }
 
   void _updateState(PipelineStatus status, {double? progress, String? message}) {
     _status = status;
@@ -72,72 +77,58 @@ class ClipperController extends ChangeNotifier {
   }
 
   /// Entry Point: Triggered when user enters a YouTube URL
+  /// 🌟 Item 3 Optimization: Do NOT download the video first. Pass URL directly to Gemini.
   Future<void> processYouTubeInput(String url) async {
-    _updateState(PipelineStatus.downloading, progress: 0.0, message: 'Extracting YouTube details...');
+    _updateState(PipelineStatus.analyzingPass1, progress: 0.1, message: 'Pasting URL to Gemini...');
     _errorMessage = null;
+    _youtubeUrl = url;
 
     try {
-      final tempDir = await storageService.getAppTempDirectory();
       final videoId = youtubeService.extractVideoId(url);
       _activeSourceIdOrHash = videoId;
       _activeSourceTitle = 'YouTube Video ($videoId)';
 
-      // 1. Check database cache first to bypass download if already analyzed!
+      // 1. Check database cache first to bypass analysis if already analyzed!
       final cached = dbService.getCachedSuggestions(videoId);
       if (cached != null) {
         _suggestions = cached;
         _updateState(PipelineStatus.showingHighlights, progress: 1.0, message: 'Loaded suggestions from cache');
-        
-        // Start downloading the muxed video silently in the background
-        _downloadMuxedVideoBackground(url, tempDir.path);
         return;
       }
 
-      // 2. Download and Mux Stream pieces
-      final muxedFile = await youtubeService.downloadAndMuxYouTubeVideo(
-        url: url,
-        outputDirectory: tempDir.path,
-        ffmpegService: ffmpegService,
-        onProgress: (p) {
-          _updateState(PipelineStatus.downloading, progress: p, message: 'Downloading HD streams...');
+      // 2. 🌟 Item 3 Optimization: Call Gemini by passing the YouTube URL directly! No downloads.
+      final suggestionsResult = await geminiService.analyzeVideoUrl(
+        url,
+        onStatusUpdate: (statusText) {
+          _updateState(PipelineStatus.analyzingPass1, message: statusText);
         },
       );
 
-      _processedSourceFile = muxedFile;
+      _suggestions = suggestionsResult;
 
-      // 3. Trigger Pass 1 Analysis
-      await _runPass1Analysis(muxedFile);
+      // Cache suggestions to Hive box
+      await dbService.cacheSuggestions(_activeSourceIdOrHash, suggestionsResult);
+
+      _updateState(PipelineStatus.showingHighlights, progress: 1.0);
     } catch (e) {
       _handleFailure(e.toString());
     }
   }
 
-  /// Helper to download the muxed video in the background during a cache hit
-  Future<void> _downloadMuxedVideoBackground(String url, String tempPath) async {
-    try {
-      final muxedFile = await youtubeService.downloadAndMuxYouTubeVideo(
-        url: url,
-        outputDirectory: tempPath,
-        ffmpegService: ffmpegService,
-        onProgress: (_) {}, // silent background progress
-      );
-      _processedSourceFile = muxedFile;
-      notifyListeners(); // Notify HomeScreen that video file is now ready
-    } catch (e) {
-      print('Warning: Background download failed: $e');
-    }
-  }
-
   /// Entry Point: Triggered when user picks a local file
+  /// 🌟 Item 4 Optimization: Compress local files over 200MB to 360p before uploading to Gemini.
   Future<void> processLocalFileInput(File file, String displayName) async {
     _updateState(PipelineStatus.hashing, progress: 0.1, message: 'Calculating unique file hash...');
     _errorMessage = null;
     _processedSourceFile = file;
     _activeSourceTitle = displayName;
+    _youtubeUrl = null;
 
     try {
-      // 1. Calculate memory-safe SHA-256 hash
-      final String fileHash = await storageService.calculateFileHash(file);
+      // 🌟 Item 2: Move heavy file hashing into a separate Dart Isolate
+      final String fileHash = await Isolate.run(() async {
+        return await storageService.calculateFileHash(file);
+      });
       _activeSourceIdOrHash = fileHash;
 
       // 2. Check cache
@@ -148,8 +139,33 @@ class ClipperController extends ChangeNotifier {
         return;
       }
 
-      // 3. Trigger Pass 1 Analysis
-      await _runPass1Analysis(file);
+      // 3. 🌟 Item 4 Check: If local file size > 200MB, compress it to 360p for Pass 1
+      final int fileSize = await file.length();
+      final int limit200Mb = 200 * 1024 * 1024; // 200 Megabytes in bytes
+
+      if (fileSize > limit200Mb) {
+        _updateState(PipelineStatus.hashing, progress: 0.3, message: 'Optimizing for upload (compressing to 360p)...');
+        
+        final tempDir = await storageService.getAppTempDirectory();
+        final String compressedPath = '${tempDir.path}/compress_${DateTime.now().millisecondsSinceEpoch}.mp4';
+        
+        // Fast hardware or software scale to 360p
+        final File compressedFile = await ffmpegService.compressVideoTo360p(
+          inputFile: file,
+          outputPath: compressedPath,
+        );
+
+        // Run Pass 1 Analysis using compressed file (much faster uploads!)
+        await _runPass1Analysis(compressedFile);
+
+        // Delete the compressed temp file immediately after Gemini finishes Pass 1
+        try {
+          if (await compressedFile.exists()) await compressedFile.delete();
+        } catch (_) {}
+      } else {
+        // Run Pass 1 directly on the original video file as is (< 200MB)
+        await _runPass1Analysis(file);
+      }
     } catch (e) {
       _handleFailure(e.toString());
     }
@@ -188,11 +204,6 @@ class ClipperController extends ChangeNotifier {
     required bool enableCaptions,
     required String selectedLanguage,
   }) async {
-    if (_processedSourceFile == null) {
-      _handleFailure('Source video is missing. Cannot render.');
-      return null;
-    }
-
     _errorMessage = null;
     final tempDir = await storageService.getAppTempDirectory();
     final documentsDir = await storageService.getAppLibraryDirectory();
@@ -207,6 +218,25 @@ class ClipperController extends ChangeNotifier {
     String? cropFilterString;
 
     try {
+      // 🌟 Item 3: If we are on the YouTube path, download the muxed stream ONLY now before cutting!
+      if (_processedSourceFile == null && _youtubeUrl != null) {
+        _updateState(PipelineStatus.downloading, progress: 0.1, message: 'Downloading segment streams from YouTube...');
+        
+        final File downloadedFile = await youtubeService.downloadAndMuxYouTubeVideo(
+          url: _youtubeUrl!,
+          outputDirectory: tempDir.path,
+          ffmpegService: ffmpegService,
+          onProgress: (p) {
+            _updateState(PipelineStatus.downloading, progress: p, message: 'Downloading pre-muxed stream...');
+          },
+        );
+        _processedSourceFile = downloadedFile;
+      }
+
+      if (_processedSourceFile == null) {
+        throw Exception('Source video file could not be retrieved.');
+      }
+
       // STEP 1: Fast trim the segment (instantly copying codecs)
       _updateState(PipelineStatus.trimming, progress: 0.1, message: 'Fast-cutting segment...');
       trimmedFile = await ffmpegService.trimVideo(
@@ -226,8 +256,6 @@ class ClipperController extends ChangeNotifier {
         if (blurIntensity == 'Heavy') blurRadius = '50:10';
 
         // 2. Build the precise, completely relative aspect ratio math strings
-        // This is 100% crash-proof on any pre-muxed YouTube video (360p or 480p)
-        // because it uses relative expressions (ih, iw) instead of hardcoded 1080p dimensions!
         if (cropStyle == '9:16') {
           if (backgroundFill == 'Crop') {
             cropFilterString = 'crop=2*trunc(ih*9/32):ih:(iw-2*trunc(ih*9/32))/2:0';
@@ -267,7 +295,7 @@ class ClipperController extends ChangeNotifier {
         assFile = await captionService.generateAssSubtitles(
           geminiTranscript: rawTranscript,
           targetFilePath: assPath,
-          cropStyle: cropStyle, // Passed dynamically to scale and position captions correctly!
+          cropStyle: cropStyle,
         );
       }
 
@@ -283,7 +311,7 @@ class ClipperController extends ChangeNotifier {
 
       _renderedClipFile = renderedClip;
 
-      // STEP 5: Generate Clip Thumbnail for History Dashboard
+      // STEP 5: Generate Clip Thumbnail for History Dashboard (Compressed at 65%!)
       _updateState(PipelineStatus.renderingFinal, progress: 0.95, message: 'Generating card thumbnails...');
       await ffmpegService.extractThumbnail(renderedClip, thumbnailPath);
 
@@ -300,8 +328,15 @@ class ClipperController extends ChangeNotifier {
       );
       await dbService.saveHistoryEntry(historyEntry);
 
-      // Final complete cleanup of stream fragments
+      // 🌟 Item 7: Guaranteed automatic clean up of downloaded source, trimmed segments, and intermediate temp files
       await storageService.clearAllTemporaryFiles();
+      // If we downloaded a YouTube video stream, delete it now so it consumes ZERO permanent device storage
+      if (_youtubeUrl != null && _processedSourceFile != null) {
+        try {
+          if (await _processedSourceFile!.exists()) await _processedSourceFile!.delete();
+        } catch (_) {}
+        _processedSourceFile = null;
+      }
 
       _updateState(PipelineStatus.completed, progress: 1.0, message: 'Clip successfully exported!');
       return renderedClip;
@@ -317,7 +352,7 @@ class ClipperController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Wipes active controller state to allow processing next links
+  /// Wipes active controller state and triggers Item 7 temp sweeps
   void reset() {
     _status = PipelineStatus.idle;
     _progress = 0.0;
@@ -326,7 +361,9 @@ class ClipperController extends ChangeNotifier {
     _renderedClipFile = null;
     _activeSourceTitle = '';
     _activeSourceIdOrHash = '';
+    _youtubeUrl = null;
     _errorMessage = null;
+    storageService.clearAllTemporaryFiles(); // 🌟 Item 7 Sweep
     notifyListeners();
   }
 }

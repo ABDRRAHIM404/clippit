@@ -25,7 +25,7 @@ class StorageService {
     return digest.toString();
   }
 
-  /// Clear all cached chunks and media pieces inside the temp folder to save space
+  /// Item 7: Guaranteed automatic clean up of all temporary files inside the cache directory
   Future<void> clearAllTemporaryFiles() async {
     try {
       final tempDir = await getAppTempDirectory();
@@ -40,5 +40,20 @@ class StorageService {
     } catch (e) {
       print('Warning: Failed to clean temporary directories: $e');
     }
+  }
+
+  /// Item 7: Fallback cleanup running on startup to catch any leftover files from crashed/halted sessions
+  Future<void> cleanLeftoverTempFilesOnStartup() async {
+    try {
+      final tempDir = await getAppTempDirectory();
+      if (await tempDir.exists()) {
+        final entities = tempDir.listSync();
+        for (var entity in entities) {
+          if (entity is File) {
+            await entity.delete();
+          }
+        }
+      }
+    } catch (_) {}
   }
 }

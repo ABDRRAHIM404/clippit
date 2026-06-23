@@ -11,8 +11,6 @@ class FFmpegService {
     required String targetPath,
   }) async {
     final duration = endSeconds - startSeconds;
-    // Command: -ss before -i makes it super-fast, seeking immediately.
-    // -c copy ensures stream copy (no rendering yet!)
     final cmd = '-ss $startSeconds -i "${sourceFile.path}" -t $duration -c copy -y "$targetPath"';
     
     final session = await FFmpegKit.execute(cmd);
@@ -48,11 +46,12 @@ class FFmpegService {
   }
 
   /// Step 2: Full Render (Smart Crop + Subtitles + Watermark Overlay)
+  /// Upgraded with Item 1: Hardware-Accelerated h264_mediacodec rendering
   Future<File> renderFinalClip({
     required File trimmedClip,
     required String targetPath,
     required bool isVertical,
-    String? cropFilter,         // e.g., "crop=607:1080:x_val:0"
+    String? cropFilter,         // e.g., "crop=608:1080:x_val:0"
     File? assSubtitleFile,      // Generated styled ASS caption file
     File? watermarkPng,         // Overlay logo path
   }) async {
@@ -65,7 +64,6 @@ class FFmpegService {
 
     // 2. ASS Subtitle Burn-In
     if (assSubtitleFile != null) {
-      // subtitles utilizes the subtitles filter which is more robust and has better font fallback mappings on Android.
       final escapedAssPath = assSubtitleFile.path.replaceAll('\\', '/').replaceAll(':', '\\:');
       filters.add("subtitles='$escapedAssPath'");
     }
@@ -74,7 +72,6 @@ class FFmpegService {
     String inputArgs = '-i "${trimmedClip.path}"';
     if (watermarkPng != null) {
       inputArgs += ' -i "${watermarkPng.path}"';
-      // Places watermark top-right, padded by 20px
       filters.add("[0:v][1:v]overlay=main_w-overlay_w-20:20[outv]");
     }
 
@@ -87,9 +84,8 @@ class FFmpegService {
       }
     }
 
-    // Re-encoding is required for crop/burn filters.
-    // We use high-speed preset libx264, medium crf (23) for balance of quality and rendering speed on phone hardware.
-    final cmd = '$inputArgs $filterChain -c:v libx264 -preset superfast -crf 23 -c:a aac -b:a 128k -y "$targetPath"';
+    // 🌟 Item 1: Try hardware-accelerated MediaCodec H.264 first, fallback to software if needed
+    final cmd = '$inputArgs $filterChain -c:v h264_mediacodec -preset superfast -crf 23 -c:a aac -b:a 128k -y "$targetPath"';
 
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
@@ -97,15 +93,46 @@ class FFmpegService {
     if (ReturnCode.isSuccess(returnCode)) {
       return File(targetPath);
     } else {
-      final logs = await session.getLogs();
+      // Software fallback in case device doesn't support the raw h264_mediacodec flags cleanly
+      final fallbackCmd = '$inputArgs $filterChain -c:v libx264 -preset superfast -crf 23 -c:a aac -b:a 128k -y "$targetPath"';
+      final fallbackSession = await FFmpegKit.execute(fallbackCmd);
+      final fallbackReturnCode = await fallbackSession.getReturnCode();
+      if (ReturnCode.isSuccess(fallbackReturnCode)) {
+        return File(targetPath);
+      }
+      final logs = await fallbackSession.getLogs();
       final logMessages = logs.map((l) => l.getMessage()).join("\n");
       throw Exception('FFmpeg Render Failed:\n$logMessages');
     }
   }
 
+  /// Item 4: Fast re-encode to 360p for local file optimization uploads
+  Future<File> compressVideoTo360p({
+    required File inputFile,
+    required String outputPath,
+  }) async {
+    final cmd = '-i "${inputFile.path}" -vf "scale=-2:360" -c:v h264_mediacodec -preset superfast -crf 28 -c:a aac -b:a 64k -y "$outputPath"';
+    
+    final session = await FFmpegKit.execute(cmd);
+    final returnCode = await session.getReturnCode();
+
+    if (ReturnCode.isSuccess(returnCode)) {
+      return File(outputPath);
+    } else {
+      final fallbackCmd = '-i "${inputFile.path}" -vf "scale=-2:360" -c:v libx264 -preset superfast -crf 28 -c:a aac -b:a 64k -y "$outputPath"';
+      final fallbackSession = await FFmpegKit.execute(fallbackCmd);
+      final fallbackReturnCode = await fallbackSession.getReturnCode();
+      if (ReturnCode.isSuccess(fallbackReturnCode)) {
+        return File(outputPath);
+      }
+      throw Exception('Video compression to 360p failed.');
+    }
+  }
+
   /// Grab clip thumbnail for Hive History Dashboard
+  /// Upgraded with Item 6: Compressed to JPEG at 65% quality (-q:v 5)
   Future<File> extractThumbnail(File videoFile, String targetJpgPath) async {
-    final cmd = '-i "${videoFile.path}" -ss 00:00:02.000 -vframes 1 -q:v 2 -y "$targetJpgPath"';
+    final cmd = '-i "${videoFile.path}" -ss 00:00:02.000 -vframes 1 -q:v 5 -y "$targetJpgPath"';
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
 
