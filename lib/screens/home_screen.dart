@@ -18,7 +18,7 @@ import 'highlights_screen.dart';
 import 'edit_screen.dart';
 import 'export_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   final DbService dbService;
 
   const HomeScreen({super.key, required this.dbService});
