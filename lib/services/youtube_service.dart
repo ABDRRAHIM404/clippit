@@ -45,7 +45,7 @@ class YouTubeService {
       // to guarantee crisp, sharp HD output, and falls back gracefully to the highest available
       // bitrate if not found (e.g. on older low-res videos), preventing any crashes!
       final muxedStreamInfo = manifest.muxed.firstWhere(
-        (s) => s.videoQuality.label == '720p',
+        (s) => s.videoQuality == VideoQuality.high720, // 🌟 Fixed: Compared directly with native VideoQuality enum!
         orElse: () => manifest.muxed.withHighestBitrate(),
       );
       final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
