@@ -1,8 +1,16 @@
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart'; // 🌟 Added to configure native fonts mapping
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 
 class FFmpegService {
+  FFmpegService() {
+    // 🌟 CRITICAL FIX: Registers your phone's native system fonts directory on startup.
+    // This allows libass/subtitles filters to successfully map 'sans-serif', 'serif', etc.
+    // to your phone's physical .ttf files, resolving the invisible captions bug!
+    FFmpegKitConfig.setFontDirectory('/system/fonts');
+  }
+
   /// Step 1: Fast cut using stream copying (extremely fast, zero re-encode)
   /// Upgraded with automatic high-speed hardware and software re-encoding fallbacks
   /// to handle fragmented YouTube pre-muxed streams that fail under stream copying!

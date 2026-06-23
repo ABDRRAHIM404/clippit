@@ -451,6 +451,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
             required String blurIntensity,
             required bool enableCaptions,
             required String selectedLanguage,
+            required String fontFamily,      // 🌟 Added dynamic font
+            required String highlightColor,  // 🌟 Added dynamic highlight color
           }) {
             setState(() {
               _selectedSuggestionForEdit = null;
@@ -463,6 +465,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
               blurIntensity: blurIntensity,
               enableCaptions: enableCaptions,
               selectedLanguage: selectedLanguage,
+              fontFamily: fontFamily,      // 🌟 Passed dynamically
+              highlightColor: highlightColor,  // 🌟 Passed dynamically
             );
           },
         );

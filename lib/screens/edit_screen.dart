@@ -7,7 +7,7 @@ import '../models/clip_suggestion.dart';
 class EditScreen extends StatefulWidget {
   final File sourceVideoFile;
   final ClipSuggestion initialSuggestion;
-  final VoidCallback onBackPressed; // 🌟 Added callback to return safely to HighlightsScreen
+  final VoidCallback onBackPressed; // Callback to return safely to HighlightsScreen
   final Function({
     required double startSeconds,
     required double endSeconds,
@@ -16,6 +16,8 @@ class EditScreen extends StatefulWidget {
     required String blurIntensity,
     required bool enableCaptions,
     required String selectedLanguage,
+    required String fontFamily,      // 🌟 Added dynamic font
+    required String highlightColor,  // 🌟 Added dynamic highlight color
   }) onExportTriggered;
 
   const EditScreen({
@@ -40,14 +42,26 @@ class _EditScreenState extends State<EditScreen> {
   String _selectedBackgroundFill = 'Blur Fill'; // Default
   String _selectedBlurIntensity = 'Medium'; // Default
 
+  // 🌟 Dynamic Captions settings
   bool _enableCaptions = true;
   String _selectedLanguage = 'English';
-  bool _isPlayerInitialized = false;
+  String _selectedFontFamilyName = 'Condensed Bold'; // Maps to sans-serif-condensed
+  String _selectedHighlightColor = 'Electric Yellow'; // Default
 
   final List<String> _cropStyles = ['Keep 16:9', '9:16', '1:1', '4:5'];
   final List<String> _backgroundFills = ['Blur Fill', 'Crop', 'Black Bars'];
   final List<String> _blurIntensities = ['Light', 'Medium', 'Heavy'];
   final List<String> _languages = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Japanese'];
+
+  // 🌟 Pre-mapped native Android system font options (100% crash-proof fallbacks)
+  final Map<String, String> _fontFamilyMapping = {
+    'Condensed Bold': 'sans-serif-condensed',
+    'Clean Modern': 'sans-serif',
+    'Editorial Serif': 'serif',
+    'Retro Monospace': 'monospace',
+  };
+
+  final List<String> _highlightColors = ['Electric Yellow', 'Electric Cyan', 'Neon Green'];
 
   @override
   void initState() {
@@ -92,8 +106,8 @@ class _EditScreenState extends State<EditScreen> {
       appBar: AppBar(
         title: const Text('Fine-Tune & Adjust'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back), // 🌟 Added a standard Back/Return arrow!
-          onPressed: widget.onBackPressed,    // 🌟 Safely returns user to Suggestions view!
+          icon: const Icon(Icons.arrow_back), // Added a standard Back/Return arrow!
+          onPressed: widget.onBackPressed,    // Safely returns user to Suggestions view!
         ),
         actions: [
           IconButton(
@@ -485,32 +499,101 @@ class _EditScreenState extends State<EditScreen> {
           onChanged: (val) => setState(() => _enableCaptions = val),
         ),
         
-        // Language Picker Panel (Only shows if captions are enabled)
+        // Expanded dynamic options when captions is on
         if (_enableCaptions) ...[
           const SizedBox(height: 12),
           Card(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Translation Language',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  // Row A: Translation Language Dropdown
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Translation Language',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                      ),
+                      DropdownButton<String>(
+                        value: _selectedLanguage,
+                        underline: const SizedBox(),
+                        dropdownColor: AppColors.surface,
+                        items: _languages.map((String lang) {
+                          return DropdownMenuItem<String>(
+                            value: lang,
+                            child: Text(lang, style: const TextStyle(fontSize: 13.5)),
+                          );
+                        }).toList(),
+                        onChanged: (String? val) {
+                          if (val != null) setState(() => _selectedLanguage = val);
+                        },
+                      ),
+                    ],
                   ),
-                  DropdownButton<String>(
-                    value: _selectedLanguage,
-                    underline: const SizedBox(),
-                    dropdownColor: AppColors.surface,
-                    items: _languages.map((String lang) {
-                      return DropdownMenuItem<String>(
-                        value: lang,
-                        child: Text(lang, style: const TextStyle(fontSize: 14)),
-                      );
-                    }).toList(),
-                    onChanged: (String? val) {
-                      if (val != null) setState(() => _selectedLanguage = val);
-                    },
+                  const SizedBox(height: 12),
+                  const Divider(color: AppColors.border, height: 1),
+                  const SizedBox(height: 12),
+
+                  // Row B: 🌟 Font Family Dropdown Selector
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Caption Font Style',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                      ),
+                      DropdownButton<String>(
+                        value: _selectedFontFamilyName,
+                        underline: const SizedBox(),
+                        dropdownColor: AppColors.surface,
+                        items: _fontFamilyMapping.keys.map((String fontName) {
+                          return DropdownMenuItem<String>(
+                            value: fontName,
+                            child: Text(fontName, style: const TextStyle(fontSize: 13.5)),
+                          );
+                        }).toList(),
+                        onChanged: (String? val) {
+                          if (val != null) setState(() => _selectedFontFamilyName = val);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: AppColors.border, height: 1),
+                  const SizedBox(height: 12),
+
+                  // Row C: 🌟 Highlight Color Dropdown Selector
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Keyword Highlight Color',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                      ),
+                      DropdownButton<String>(
+                        value: _selectedHighlightColor,
+                        underline: const SizedBox(),
+                        dropdownColor: AppColors.surface,
+                        items: _highlightColors.map((String color) {
+                          return DropdownMenuItem<String>(
+                            value: color,
+                            child: Text(
+                              color, 
+                              style: TextStyle(
+                                fontSize: 13.5, 
+                                fontWeight: FontWeight.bold,
+                                color: _getPreviewColor(color),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (String? val) {
+                          if (val != null) setState(() => _selectedHighlightColor = val);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -519,6 +602,12 @@ class _EditScreenState extends State<EditScreen> {
         ],
       ],
     );
+  }
+
+  Color _getPreviewColor(String colorName) {
+    if (colorName == 'Electric Cyan') return AppColors.accentNeon;
+    if (colorName == 'Neon Green') return AppColors.success;
+    return AppColors.accentWarm; // Electric Yellow
   }
 
   Widget _buildToggleCard({
@@ -577,6 +666,7 @@ class _EditScreenState extends State<EditScreen> {
         onPressed: isTooLong
             ? null
             : () {
+                final mappedFont = _fontFamilyMapping[_selectedFontFamilyName] ?? 'sans-serif-condensed';
                 widget.onExportTriggered(
                   startSeconds: _startSeconds,
                   endSeconds: _endSeconds,
@@ -585,6 +675,8 @@ class _EditScreenState extends State<EditScreen> {
                   blurIntensity: _selectedBlurIntensity,
                   enableCaptions: _enableCaptions,
                   selectedLanguage: _selectedLanguage,
+                  fontFamily: mappedFont,            // 🌟 Passes the actual native Font name
+                  highlightColor: _selectedHighlightColor, // 🌟 Passes the highlight color selection
                 );
               },
         style: ElevatedButton.styleFrom(

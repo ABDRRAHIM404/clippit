@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
-import 'package:crypto/crypto.dart'; // 🌟 Added for safe Isolate hashing conversion
+import 'package:crypto/crypto.dart'; // Added for safe Isolate hashing conversion
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
 import '../services/youtube_service.dart';
@@ -153,8 +153,6 @@ class ClipperController extends ChangeNotifier {
 
     try {
       // 🌟 Bug 2 Fix: Extract file path string and compute SHA-256 inside a clean Isolate.
-      // We pass ONLY the plain string `filePath` across the isolate boundaries,
-      // completely isolating DbService, open Hive VM syncs, and future closures on the main thread!
       final String filePath = file.path;
       final String fileHash = await Isolate.run(() async {
         final bytes = await File(filePath).readAsBytes();
@@ -225,6 +223,7 @@ class ClipperController extends ChangeNotifier {
   }
 
   /// Triggers full segment crop rendering, subtitle burn-ins, and final export
+  /// 🌟 Upgraded to pass dynamic fontFamily and highlightColor properties to the caption compiler!
   Future<File?> renderAndExportClip({
     required double startSeconds,
     required double endSeconds,
@@ -233,7 +232,14 @@ class ClipperController extends ChangeNotifier {
     required String blurIntensity,   // 'Light', 'Medium', 'Heavy'
     required bool enableCaptions,
     required String selectedLanguage,
+    required String fontFamily,      // 🌟 Added
+    required String highlightColor,  // 🌟 Added
   }) async {
+    if (_processedSourceFile == null) {
+      _handleFailure('Source video is missing. Cannot render.');
+      return null;
+    }
+
     _errorMessage = null;
     final tempDir = await storageService.getAppTempDirectory();
     final documentsDir = await storageService.getAppLibraryDirectory();
@@ -248,10 +254,6 @@ class ClipperController extends ChangeNotifier {
     String? cropFilterString;
 
     try {
-      if (_processedSourceFile == null) {
-        throw Exception('Source video file could not be retrieved.');
-      }
-
       // STEP 1: Fast trim the segment (instantly copying codecs)
       _updateState(PipelineStatus.trimming, progress: 0.1, message: 'Fast-cutting segment...');
       trimmedFile = await ffmpegService.trimVideo(
@@ -311,6 +313,8 @@ class ClipperController extends ChangeNotifier {
           geminiTranscript: rawTranscript,
           targetFilePath: assPath,
           cropStyle: cropStyle,
+          fontFamily: fontFamily,      // 🌟 Passed!
+          highlightColor: highlightColor,  // 🌟 Passed!
         );
       }
 

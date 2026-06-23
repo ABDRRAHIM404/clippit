@@ -63,7 +63,7 @@ This eliminates complex, crash-prone navigation stacks by swapping views dynamic
       │ (Compile styled ASS sheet, apply relative Crop or Blur-Fill, compile MP4)
       ▼
 [ Export & Share State ]
-      │ (Self-scaling preview player, native share plus sheets)
+      │ (Self-scaling preview player, Save to Gallery, native share plus sheets)
       │ (User Taps Back Arrow -> Return to Idle Dashboard)
 ```
 
@@ -228,7 +228,7 @@ class GeminiService {
 
   GeminiService({
     required this.apiKey,
-    this.analysisModelName = 'gemini-2.5-flash', // 🌟 Upgraded to 2.5-flash default
+    this.analysisModelName = 'gemini-2.5-flash', // Upgraded to 2.5-flash default
     this.transcriptionModelName = 'gemini-2.5-flash',
   }) {
     _model = GenerativeModel(
@@ -304,6 +304,38 @@ class GeminiService {
       'fileUri': data['file']['uri'] as String,
       'apiName': data['file']['name'] as String,
     };
+  }
+}
+```
+
+---
+
+### B. `YouTubeService` (`lib/services/youtube_service.dart`)
+```dart
+class YouTubeService {
+  final YoutubeExplode _yt = YoutubeExplode();
+
+  /// Downloads pre-muxed stream at crisp 720p HD resolution and falls back gracefully to highest available bitrate
+  Future<File> downloadAndMuxYouTubeVideo({
+    required String url,
+    required String outputDirectory,
+    required FFmpegService ffmpegService,
+    required Function(double progress) onProgress,
+  }) async {
+    final parsedId = VideoId.parseVideoId(url);
+    final String videoIdString = parsedId.toString();
+    final manifest = await _yt.videos.streams.getManifest(parsedId).timeout(const Duration(seconds: 45));
+    
+    // 🌟 Searches specifically for the 720p HD pre-muxed stream (1280x720) to guarantee crisp output
+    // Uses type-safe VideoQuality enum comparison to bypass compiler properties issues!
+    final muxedStreamInfo = manifest.muxed.firstWhere(
+      (s) => s.videoQuality == VideoQuality.high720,
+      orElse: () => manifest.muxed.withHighestBitrate(),
+    );
+    
+    final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
+    await _downloadStream(muxedStreamInfo, muxedFile, (p) => onProgress(p));
+    return muxedFile;
   }
 }
 ```
@@ -446,3 +478,7 @@ jobs:
 | **MIME Rejections** | `Unsupported MIME: application/octet-stream` | File API payload had generic binary headers rather than media definitions | Swapped Multipart contentType header to `MediaType('video', 'mp4')` directly in `gemini_service.dart`. |
 | **Invisible Subtitles** | Captions are turned on but do not overlay | Portrait style (`1080x1920`) pushed text off-screen when compiling landscape or square ratios | Upgraded `caption_service.dart` to receive `cropStyle`. Resolutions (`PlayResX/Y`) and safe margins now scale proportionally. |
 | **Blur-Fill Overflows** | FFmpeg compile crashes on 360p/480p videos | Hardcoded scale dimensions (`1080x1920`) exceeded input boundaries of pre-muxed streams | Replaced hardcoded dimensions with 100% relative mathematical expressions utilizing `ih` and `iw` inside the split filter chain. |
+| **Download Timeout** | YouTube downloads timeout after 15 seconds | Initial stream handshake lag over high-latency cellular or mobile networks | Increased connection and packet stream timeout boundaries to a highly safe 45-second window inside `youtube_service.dart`. |
+| **Local File Hang** | Video compression to 360p takes over 1 minute | CPU/transcoding lag of both separate audio and video tracks | Upgraded `compressVideoTo360p` inside `ffmpeg_service.dart` to scale down to 320p width with ultrafast presets and stream-copy the audio cleanly (`-c:a copy`). |
+| **Permanent Save** | Tapping "Save" does not persist to phone | Scoped storage access blocked or raw cache path unshareable | Implemented a pure-Dart file copy stream directly to the public `/Download` folder, instantly registering it to Android's gallery. |
+| **High-Quality Link** | YouTube video downloaded is low-res (360p) | Default pre-muxed download targets chose lowest-common-denominator streams | Upgraded stream selectors inside `youtube_service.dart` to prioritize **720p HD** pre-muxed streams and fallback gracefully only if not found. |
