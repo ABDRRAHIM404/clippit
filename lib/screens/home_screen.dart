@@ -52,7 +52,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   ClipSuggestion? _selectedSuggestionForEdit;
   File? _historicalClipToPlay; // Persists chosen clip to play from dashboard history
 
-  // 🌟 Item 8: Lazy loading pagination offsets
+  // Item 8: Lazy loading pagination offsets
   int _loadedHistoryCount = 10;
 
   @override
@@ -399,6 +399,9 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
             setState(() {
               _selectedSuggestionForEdit = clip;
             });
+            // 🌟 Bug 1 Fix: Trigger the background pre-muxed stream download
+            // IMMEDIATELY when the user taps a highlighted suggested moment from the list!
+            _clipperController!.prepareSourceVideoForEdit();
           },
           onBackPressed: () {
             _clipperController!.reset(); // Safe return back to Idle dashboard!
@@ -705,7 +708,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
       );
     }
 
-    // 🌟 Item 8: Segment list to show only the paginated count initially
+    // Item 8: Segment list to show only the paginated count initially
     final paginatedList = _historyList.take(_loadedHistoryCount).toList();
 
     return Column(
@@ -738,7 +741,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                   subtitle: Text(
                     'Source: ${item.sourcePathOrUrl.length > 24 ? "${item.sourcePathOrUrl.substring(0, 24)}..." : item.sourcePathOrUrl}\nDuration: ${(item.endTime - item.startTime).toStringAsFixed(1)}s',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
+                    ),
                   isThreeLine: true,
                   onTap: () {
                     setState(() {
@@ -755,7 +758,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
           },
         ),
         
-        // 🌟 Item 8: Render a high-retention "Load More" tile if there are more clips to reveal!
+        // Item 8: Render a high-retention "Load More" tile if there are more clips to reveal!
         if (_historyList.length > _loadedHistoryCount)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),

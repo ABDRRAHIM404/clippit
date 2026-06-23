@@ -22,36 +22,34 @@ class YouTubeService {
   }
 
   /// Downloads a pre-muxed stream (contains both video and audio)
-  /// This is 10x faster, uses 90% less bandwidth, and completely bypasses
-  /// YouTube's high-definition track throttling which was causing the 3% download block!
+  /// Upgraded with strict timeouts (15 seconds) to prevent silent hangs and report errors clearly!
   Future<File> downloadAndMuxYouTubeVideo({
     required String url,
     required String outputDirectory,
     required FFmpegService ffmpegService,
     required Function(double progress) onProgress,
   }) async {
-    final parsedId = VideoId.parseVideoId(url);
-    if (parsedId == null) throw Exception('Invalid YouTube URL');
-    final String videoIdString = parsedId.toString();
-    
-    // Get stream manifest
-    final manifest = await _yt.videos.streams.getManifest(parsedId);
-    
-    // 🌟 CRITICAL UPGRADE: Select the highest-quality pre-muxed stream (typically 360p or 720p).
-    // Pre-muxed streams are lightweight (approx. 15-30MB for a 17-minute video, compared to 350MB for 1080p separate streams).
-    // They download in single-session HTTP streams that NEVER get throttled or stuck!
-    final muxedStreamInfo = manifest.muxed.withHighestBitrate();
-
-    final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
-
-    // If muxed file already exists, return it immediately
-    if (await muxedFile.exists() && await muxedFile.length() > 100000) {
-      onProgress(1.0);
-      return muxedFile;
-    }
-
     try {
-      // Download the unified stream directly (smooth 0% to 100% progress tracking!)
+      final parsedId = VideoId.parseVideoId(url);
+      if (parsedId == null) throw Exception('Invalid YouTube URL format.');
+      final String videoIdString = parsedId.toString();
+      
+      // 🌟 Added strict timeout to getManifest call
+      final manifest = await _yt.videos.streams.getManifest(parsedId).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('Failed to retrieve video metadata from YouTube (Connection Timed Out).'),
+      );
+      
+      final muxedStreamInfo = manifest.muxed.withHighestBitrate();
+      final muxedFile = File('$outputDirectory/${videoIdString}_full.mp4');
+
+      // If muxed file already exists, return it immediately
+      if (await muxedFile.exists() && await muxedFile.length() > 100000) {
+        onProgress(1.0);
+        return muxedFile;
+      }
+
+      // Download the unified stream directly (with strict chunked timeouts)
       await _downloadStream(
         muxedStreamInfo, 
         muxedFile, 
@@ -61,9 +59,7 @@ class YouTubeService {
       onProgress(1.0);
       return muxedFile;
     } catch (e) {
-      // Cleanup file in case of interrupted streams
-      if (await muxedFile.exists()) await muxedFile.delete();
-      throw Exception('Download stalled or failed: $e');
+      throw Exception('YouTube Stream Extraction Failed: $e');
     }
   }
 
@@ -80,7 +76,15 @@ class YouTubeService {
     var downloadedBytes = 0;
 
     try {
-      await for (final data in stream) {
+      // 🌟 Listen to stream and apply timeout to individual data packets
+      final subscription = stream.timeout(
+        const Duration(seconds: 15),
+        onTimeout: (sink) {
+          sink.addError(TimeoutException('YouTube stream stalled. Data packet retrieval timed out.'));
+        },
+      );
+
+      await for (final data in subscription) {
         downloadedBytes += data.length;
         progressCallback(downloadedBytes / totalBytes);
         fileStream.add(data);
