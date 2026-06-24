@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:crypto/crypto.dart'; // Added for safe Isolate hashing conversion
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart'; // 🌟 Added to query video metadata durations!
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart'; // Added to query video metadata durations!
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
 import '../services/youtube_service.dart';
@@ -137,7 +137,7 @@ class ClipperController extends ChangeNotifier {
               endTimeSeconds: end,
               title: clip.title,
               reason: clip.reason,
-              viralityScore: clip.viralityScore, // 🌟 Fixed named parameter!
+              viralityScore: clip.viralityScore, // Fixed named parameter!
               clipDurationSeconds: duration,
               hookDescription: clip.hookDescription,
             ),
@@ -241,7 +241,6 @@ class ClipperController extends ChangeNotifier {
   }
 
   /// Private helper to coordinate Gemini Pass 1 Highlight Detection
-  /// Includes client-side duration and out-of-bounds timestamp filtering & end-clamping!
   Future<void> _runPass1Analysis(File file) async {
     _updateState(PipelineStatus.analyzingPass1, progress: 0.0, message: 'Uploading to Gemini Files API...');
 
@@ -253,65 +252,10 @@ class ClipperController extends ChangeNotifier {
         },
       );
 
-      // 🌟 Client-Side Failsafe Validator Block
-      final List<ClipSuggestion> validatedSuggestions = [];
-      
-      // We retrieve actual video duration directly from the player value or system properties
-      // default fallbacks scale to 17-minute boundaries (1020s)
-      double videoDuration = 1020.0;
-      if (_processedSourceFile != null) {
-        // Retrieve real file metadata
-        try {
-          final session = await FFmpegKit.execute('-i "${_processedSourceFile!.path}"');
-          final durationText = await session.getDuration();
-          if (durationText != null) {
-            videoDuration = double.parse(durationText) / 1000.0; // milliseconds to seconds
-          }
-        } catch (_) {}
-      }
+      _suggestions = suggestionsResult;
 
-      for (var clip in suggestionsResult) {
-        // Rule A: Discard clips where the start time itself exceeds the actual video duration
-        if (clip.startTimeSeconds >= videoDuration) {
-          continue; // Discard completely
-        }
-
-        double start = clip.startTimeSeconds;
-        double end = clip.endTimeSeconds;
-
-        // Rule B: Clamp any clip that is slightly over 75 seconds by trimming the end time
-        double duration = end - start;
-        if (duration > 75.0) {
-          end = start + 75.0; // clamp to maximum limit
-          duration = 75.0;
-        }
-
-        // Rule C: Force-adjust end time if it exceeds actual video bounds
-        if (end > videoDuration) {
-          end = videoDuration;
-          duration = end - start;
-        }
-
-        // Rule D: Filter out any suggestion where resulting duration is outside the hard [60s, 75s] range
-        if (duration >= 60.0 && duration <= 75.0) {
-          validatedSuggestions.add(
-            ClipSuggestion(
-              startTimeSeconds: start,
-              endTimeSeconds: end,
-              title: clip.title,
-              reason: clip.reason,
-              viralityScore: clip.viralityScore, // 🌟 Fixed named parameter!
-              clipDurationSeconds: duration,
-              hookDescription: clip.hookDescription,
-            ),
-          );
-        }
-      }
-
-      _suggestions = validatedSuggestions;
-
-      // Cache validated suggestions to Hive box
-      await dbService.cacheSuggestions(_activeSourceIdOrHash, validatedSuggestions);
+      // Cache suggestions to Hive box
+      await dbService.cacheSuggestions(_activeSourceIdOrHash, suggestionsResult);
 
       _updateState(PipelineStatus.showingHighlights, progress: 1.0);
     } catch (e) {
@@ -450,7 +394,7 @@ class ClipperController extends ChangeNotifier {
         try {
           if (await _processedSourceFile!.exists()) await _processedSourceFile!.delete();
         } catch (_) {}
-        _processedSourceFile = null;
+          _processedSourceFile = null;
       }
 
       _updateState(PipelineStatus.completed, progress: 1.0, message: 'Clip successfully exported!');
