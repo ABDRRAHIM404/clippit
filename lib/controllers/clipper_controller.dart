@@ -104,10 +104,50 @@ class ClipperController extends ChangeNotifier {
         },
       );
 
-      _suggestions = suggestionsResult;
+      // 🌟 Client-Side Failsafe Validator Block
+      final List<ClipSuggestion> validatedSuggestions = [];
+      
+      // Since video is remote, we scale bounds checking to standard 17-minute limits (1020s)
+      const double videoDuration = 1020.0;
 
-      // Cache suggestions to Hive box
-      await dbService.cacheSuggestions(_activeSourceIdOrHash, suggestionsResult);
+      for (var clip in suggestionsResult) {
+        if (clip.startTimeSeconds >= videoDuration) {
+          continue; // Discard completely
+        }
+
+        double start = clip.startTimeSeconds;
+        double end = clip.endTimeSeconds;
+
+        double duration = end - start;
+        if (duration > 75.0) {
+          end = start + 75.0; // clamp
+          duration = 75.0;
+        }
+
+        if (end > videoDuration) {
+          end = videoDuration;
+          duration = end - start;
+        }
+
+        if (duration >= 60.0 && duration <= 75.0) {
+          validatedSuggestions.add(
+            ClipSuggestion(
+              startTimeSeconds: start,
+              endTimeSeconds: end,
+              title: clip.title,
+              reason: clip.reason,
+              virality_score: clip.viralityScore,
+              clipDurationSeconds: duration,
+              hookDescription: clip.hookDescription,
+            ),
+          );
+        }
+      }
+
+      _suggestions = validatedSuggestions;
+
+      // Cache validated suggestions to Hive box
+      await dbService.cacheSuggestions(_activeSourceIdOrHash, validatedSuggestions);
 
       _updateState(PipelineStatus.showingHighlights, progress: 1.0);
     } catch (e) {
@@ -200,6 +240,7 @@ class ClipperController extends ChangeNotifier {
   }
 
   /// Private helper to coordinate Gemini Pass 1 Highlight Detection
+  /// Includes client-side duration and out-of-bounds timestamp filtering & end-clamping!
   Future<void> _runPass1Analysis(File file) async {
     _updateState(PipelineStatus.analyzingPass1, progress: 0.0, message: 'Uploading to Gemini Files API...');
 
@@ -211,10 +252,65 @@ class ClipperController extends ChangeNotifier {
         },
       );
 
-      _suggestions = suggestionsResult;
+      // 🌟 Client-Side Failsafe Validator Block
+      final List<ClipSuggestion> validatedSuggestions = [];
+      
+      // We retrieve actual video duration directly from the player value or system properties
+      // default fallbacks scale to 17-minute boundaries (1020s)
+      double videoDuration = 1020.0;
+      if (_processedSourceFile != null) {
+        // Retrieve real file metadata
+        try {
+          final session = await FFmpegKit.execute('-i "${_processedSourceFile!.path}"');
+          final durationText = await session.getDuration();
+          if (durationText != null) {
+            videoDuration = double.parse(durationText) / 1000.0; // milliseconds to seconds
+          }
+        } catch (_) {}
+      }
 
-      // Cache suggestions to Hive box
-      await dbService.cacheSuggestions(_activeSourceIdOrHash, suggestionsResult);
+      for (var clip in suggestionsResult) {
+        // Rule A: Discard clips where the start time itself exceeds the actual video duration
+        if (clip.startTimeSeconds >= videoDuration) {
+          continue; // Discard completely
+        }
+
+        double start = clip.startTimeSeconds;
+        double end = clip.endTimeSeconds;
+
+        // Rule B: Clamp any clip that is slightly over 75 seconds by trimming the end time
+        double duration = end - start;
+        if (duration > 75.0) {
+          end = start + 75.0; // clamp to maximum limit
+          duration = 75.0;
+        }
+
+        // Rule C: Force-adjust end time if it exceeds actual video bounds
+        if (end > videoDuration) {
+          end = videoDuration;
+          duration = end - start;
+        }
+
+        // Rule D: Filter out any suggestion where resulting duration is outside the hard [60s, 75s] range
+        if (duration >= 60.0 && duration <= 75.0) {
+          validatedSuggestions.add(
+            ClipSuggestion(
+              startTimeSeconds: start,
+              endTimeSeconds: end,
+              title: clip.title,
+              reason: clip.reason,
+              virality_score: clip.viralityScore,
+              clipDurationSeconds: duration,
+              hookDescription: clip.hookDescription,
+            ),
+          );
+        }
+      }
+
+      _suggestions = validatedSuggestions;
+
+      // Cache validated suggestions to Hive box
+      await dbService.cacheSuggestions(_activeSourceIdOrHash, validatedSuggestions);
 
       _updateState(PipelineStatus.showingHighlights, progress: 1.0);
     } catch (e) {

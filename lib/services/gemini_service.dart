@@ -19,7 +19,7 @@ class GeminiService {
     this.analysisModelName = 'gemini-2.5-flash',
     this.transcriptionModelName = 'gemini-2.5-flash',
   }) {
-    // 1. Configure Pass 1 Model with JSON schema constraints
+    // 1. Configure Pass 1 Model with updated system instructions & JSON schemas
     _model = GenerativeModel(
       model: analysisModelName,
       apiKey: apiKey,
@@ -30,18 +30,51 @@ class GeminiService {
             'highlights': Schema.array(
               items: Schema.object(
                 properties: {
-                  'start_time_seconds': Schema.number(),
-                  'end_time_seconds': Schema.number(),
-                  'title': Schema.string(),
-                  'reason': Schema.string(),
-                  'virality_score': Schema.integer(),
+                  'start_time_seconds': Schema.number(description: 'Exact start timestamp in seconds, must be within video duration'),
+                  'end_time_seconds': Schema.number(description: 'Exact end timestamp in seconds, must be 60-75 seconds after start_time_seconds and within video duration'),
+                  'clip_duration_seconds': Schema.number(description: 'Must equal end_time_seconds minus start_time_seconds, must be between 60 and 75'),
+                  'title': Schema.string(description: 'Punchy viral-style title under 8 words'),
+                  'reason': Schema.string(description: 'Specific explanation of why this moment stops the scroll and retains viewers to the end'),
+                  'hook_description': Schema.string(description: 'Describe exactly what happens in the first 3 seconds of this clip that grabs attention'),
+                  'virality_score': Schema.integer(description: 'Score between 1 and 100 based on hook strength, emotional intensity, shareability, and completeness'),
                 },
-                requiredProperties: ['start_time_seconds', 'end_time_seconds', 'title', 'reason', 'virality_score'],
+                requiredProperties: [
+                  'start_time_seconds',
+                  'end_time_seconds',
+                  'clip_duration_seconds',
+                  'title',
+                  'reason',
+                  'hook_description',
+                  'virality_score'
+                ],
               ),
             ),
           },
           requiredProperties: ['highlights'],
         ),
+      ),
+      systemInstruction: Content.system(
+        'You are a world-class short-form video editor and viral content strategist with deep expertise in TikTok, YouTube Shorts, and Instagram Reels. Your job is to analyze the provided video and identify the most viral-worthy highlight moments.\n\n'
+        'STRICT RULES YOU MUST FOLLOW:\n'
+        '1. Every clip MUST be between 60 and 75 seconds long. Calculate end_time_seconds - start_time_seconds and verify it is between 60 and 75 before including it. If it is outside this range, adjust the end time until it fits. Never return a clip shorter than 60 or longer than 75 seconds under any circumstances.\n'
+        '2. All timestamps MUST be within the actual video duration. Never suggest a start or end time that exceeds the total length of the video. If you are unsure of the exact duration, stay well within what you can clearly see in the video.\n'
+        '3. Return a minimum of 3 and maximum of 6 highlight suggestions, ranked from highest to lowest virality score.\n\n'
+        'WHAT MAKES A VIRAL CLIP:\n'
+        '- Hook in the first 3 seconds — something visually or verbally shocking, funny, surprising, or emotionally charged that stops the scroll immediately\n'
+        '- Emotional peaks — anger, laughter, shock, awe, sadness, or excitement at a high intensity\n'
+        '- Conflict or tension — disagreement, competition, challenge, unexpected twist\n'
+        '- Satisfying payoff — a moment that delivers a clear resolution or punchline\n'
+        '- Quotable lines — a single sentence so punchy or profound it makes someone want to share it\n'
+        '- Visual spectacle — explosions, crashes, stunts, transformations, or anything visually dramatic\n'
+        '- Relatability — a moment that makes the viewer think "that is exactly me"\n'
+        '- Urgency — content that feels like the viewer must watch right now or miss something important\n\n'
+        'WHAT TO AVOID:\n'
+        '- Slow buildup sections with no payoff within the clip itself\n'
+        '- Moments that require heavy context from earlier in the video to understand\n'
+        '- Clips that start or end mid-sentence or mid-thought — every clip must feel complete on its own\n'
+        '- Repetitive or filler content\n\n'
+        'For the title, write it like a viral YouTube Shorts title — punchy, curiosity-driven, under 8 words, no clickbait that doesn\'t deliver.\n'
+        'For the reason, explain specifically why this moment will stop someone mid-scroll and make them watch to the end.'
       ),
     );
 
@@ -89,7 +122,7 @@ class GeminiService {
       final response = await _model.generateContent([
         Content.multi([
           filePart,
-          TextPart('Analyze this video and return the top viral highlights. Keep recommended duration strictly between 60 and 75 seconds.')
+          TextPart('Analyze this video and return the top viral highlights matching our strict duration guidelines.')
         ])
       ]);
 
@@ -106,7 +139,7 @@ class GeminiService {
     }
   }
 
-  /// Pass 1: Analysis for YouTube URLs directly (Item 3 - zero download/upload bandwidth)
+  /// Pass 1: Analysis for YouTube URLs directly
   Future<List<ClipSuggestion>> analyzeVideoUrl(String youtubeUrl, {Function(String status)? onStatusUpdate}) async {
     onStatusUpdate?.call('Asking Gemini to fetch and analyze YouTube video directly...');
 
@@ -115,7 +148,7 @@ class GeminiService {
     final response = await _model.generateContent([
       Content.multi([
         filePart,
-        TextPart('Analyze this video and return the top viral highlights. Keep recommended duration strictly between 60 and 75 seconds.')
+        TextPart('Analyze this video and return the top viral highlights matching our strict duration guidelines.')
       ])
     ]);
 
