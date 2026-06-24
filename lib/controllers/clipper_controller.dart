@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:crypto/crypto.dart'; // Added for safe Isolate hashing conversion
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart'; // 🌟 Added to query video metadata durations!
 import '../models/clip_suggestion.dart';
 import '../models/clip_history_entry.dart';
 import '../services/youtube_service.dart';
@@ -136,7 +137,7 @@ class ClipperController extends ChangeNotifier {
               endTimeSeconds: end,
               title: clip.title,
               reason: clip.reason,
-              virality_score: clip.viralityScore,
+              viralityScore: clip.viralityScore, // 🌟 Fixed named parameter!
               clipDurationSeconds: duration,
               hookDescription: clip.hookDescription,
             ),
@@ -299,7 +300,7 @@ class ClipperController extends ChangeNotifier {
               endTimeSeconds: end,
               title: clip.title,
               reason: clip.reason,
-              virality_score: clip.viralityScore,
+              viralityScore: clip.viralityScore, // 🌟 Fixed named parameter!
               clipDurationSeconds: duration,
               hookDescription: clip.hookDescription,
             ),
@@ -328,8 +329,8 @@ class ClipperController extends ChangeNotifier {
     required String blurIntensity,   // 'Light', 'Medium', 'Heavy'
     required bool enableCaptions,
     required String selectedLanguage,
-    required String fontFamily,      // 🌟 Added
-    required String highlightColor,  // 🌟 Added
+    required String fontFamily,      // Added
+    required String highlightColor,  // Added
   }) async {
     if (_processedSourceFile == null) {
       _handleFailure('Source video is missing. Cannot render.');
@@ -409,8 +410,8 @@ class ClipperController extends ChangeNotifier {
           geminiTranscript: rawTranscript,
           targetFilePath: assPath,
           cropStyle: cropStyle,
-          fontFamily: fontFamily,      // 🌟 Passed!
-          highlightColor: highlightColor,  // 🌟 Passed!
+          fontFamily: fontFamily,      
+          highlightColor: highlightColor,  
         );
       }
 
